@@ -5,7 +5,7 @@ import { createBadRequestError, createUnauthorizedError } from "../../utils/erro
 
 export default async function authRoutes(fastify, opts) {
   // Register Route
-  fastify.post("/create", {
+  fastify.post("/register", {
     schema: {
       body: {
         type: "object",

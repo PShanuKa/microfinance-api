@@ -12,19 +12,25 @@ export default async function userRoutes(fastify, opts) {
           page: { type: "number", default: 1 },
           limit: { type: "number", default: 10 },
           search: { type: "string" },
+          role: { type: "string" },
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, search } = request.query;
+      const { page, limit, search, role } = request.query;
       const skip = (page - 1) * limit;
 
-      const where = search ? {
-        OR: [
-          { fullname: { contains: search } },
-          { email: { contains: search } },
+      const where = {
+        AND: [
+          search ? {
+            OR: [
+              { fullname: { contains: search } },
+              { email: { contains: search } },
+            ],
+          } : {},
+          role ? { role } : {},
         ],
-      } : {};
+      };
 
       const [users, total] = await Promise.all([
         fastify.prisma.user.findMany({

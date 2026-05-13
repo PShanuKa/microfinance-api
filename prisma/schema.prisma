@@ -22,7 +22,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  refreshTokens RefreshToken[]
+  refreshTokens  RefreshToken[]
+  officerGroups  Group[]        @relation("OfficerGroups")
 
   @@map("users")
 }
@@ -36,6 +37,76 @@ model RefreshToken {
   updatedAt DateTime @updatedAt
 
   @@map("refresh_tokens")
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  clientNo    String   @unique // C-001, etc.
+  fullname    String
+  nic         String   @unique
+  phone       String
+  address     String?  @db.Text
+  job         String?
+  status      ClientStatus @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  groupMembers GroupMember[]
+
+  @@map("clients")
+}
+
+model Group {
+  id            String   @id @default(cuid())
+  name          String
+  branch        String
+  collectionDay Int      // 1 = Monday, 7 = Sunday
+  officerId     String
+  officer       User     @relation("OfficerGroups", fields: [officerId], references: [id])
+  
+  status        Boolean  @default(true)
+  
+  members       GroupMember[]
+
+  createdBy     String
+  updatedBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  isLeader  Boolean  @default(false)
+  
+  guarantors Guarantor[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, clientId])
+  @@map("group_members")
+}
+
+model Guarantor {
+  id        String   @id @default(cuid())
+  memberId  String
+  member    GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  
+  fullname  String
+  nic       String
+  phone     String
+  address   String   @db.Text
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("guarantors")
 }
 
 model DBVersion {
@@ -54,4 +125,10 @@ enum Role {
   COLLECTION_OFFICER
   APPROVER
   AUDITOR
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  BLACKLISTED
 }
