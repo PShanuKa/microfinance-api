@@ -260,16 +260,15 @@ export default async function groupRoutes(fastify, opts) {
   fastify.delete("/:id", async (request, reply) => {
     const { id } = request.params;
 
-    // Check for active loans
-    const activeLoans = await fastify.prisma.loan.findFirst({
+    // Check for ANY associated loans
+    const existingLoan = await fastify.prisma.loan.findFirst({
       where: {
-        groupId: id,
-        status: { in: ["APPROVED", "COMPLETED"] }
+        groupId: id
       }
     });
 
-    if (activeLoans) {
-      throw createBadRequestError("Cannot delete a group with active or completed loans");
+    if (existingLoan) {
+      throw createBadRequestError("Cannot delete a group that has associated loan applications");
     }
 
     await fastify.prisma.group.delete({ where: { id } });

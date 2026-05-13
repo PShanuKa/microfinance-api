@@ -37,6 +37,15 @@ export default async function clientRoutes(fastify, opts) {
           where,
           skip,
           take: limit,
+          include: {
+            groupMembers: {
+              include: {
+                group: {
+                  select: { id: true, name: true, branch: true }
+                }
+              }
+            }
+          },
           orderBy: { createdAt: "desc" },
         }),
         fastify.prisma.client.count({ where }),
@@ -182,7 +191,16 @@ export default async function clientRoutes(fastify, opts) {
   // Get single client
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;
-    const client = await fastify.prisma.client.findUnique({ where: { id } });
+    const client = await fastify.prisma.client.findUnique({ 
+      where: { id },
+      include: {
+        groupMembers: {
+          include: {
+            group: true
+          }
+        }
+      }
+    });
     if (!client) throw createNotFoundError("Client not found");
     return { success: true, client };
   });
