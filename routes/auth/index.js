@@ -5,7 +5,7 @@ import { createBadRequestError, createUnauthorizedError } from "../../utils/erro
 
 export default async function authRoutes(fastify, opts) {
   // Register Route
-  fastify.post("/register", {
+  fastify.post("/create", {
     schema: {
       body: {
         type: "object",
@@ -20,6 +20,20 @@ export default async function authRoutes(fastify, opts) {
           },
           branch: { type: "array", items: { type: "string" } },
         },
+        errorMessage: {
+          required: {
+            fullname: "Full name is required",
+            email: "Email is required",
+            password: "Password is required",
+            role: "Role is required"
+          },
+          properties: {
+            email: "Invalid email format",
+            password: "Password must be at least 6 characters",
+            fullname: "Full name must be at least 3 characters",
+            role: "Invalid role selected"
+          }
+        }
       },
     },
     handler: async (request, reply) => {
@@ -77,8 +91,18 @@ export default async function authRoutes(fastify, opts) {
         required: ["email", "password"],
         properties: {
           email: { type: "string", format: "email" },
-          password: { type: "string" },
+          password: { type: "string", minLength: 6 },
         },
+        errorMessage: {
+          required: {
+            email: "Email is required",
+            password: "Password is required"
+          },
+          properties: {
+            email: "Invalid email format",
+            password: "Password must be at least 6 characters"
+          }
+        }
       },
     },
     handler: async (request, reply) => {
@@ -102,7 +126,7 @@ export default async function authRoutes(fastify, opts) {
 
       // Upsert refresh token
       await fastify.prisma.refreshToken.upsert({
-        where: { token: tokens.refreshToken }, // This is technically unique, but we usually look by user
+        where: { token: tokens.refreshToken },
         update: { token: tokens.refreshToken },
         create: {
           token: tokens.refreshToken,

@@ -1,5 +1,6 @@
 // app.js
 import Fastify from "fastify";
+import ajvErrors from "ajv-errors";
 import corsPlugin from "./plugins/cors.js";
 import { envSchema } from "./config/env.schema.js";
 import envPlugin from "@fastify/env";
@@ -39,6 +40,12 @@ export async function buildApp(opts = {}) {
           },
         ],
       },
+    },
+    ajv: {
+      customOptions: {
+        allErrors: true,
+      },
+      plugins: [ajvErrors],
     },
   });
 

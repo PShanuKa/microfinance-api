@@ -36,6 +36,7 @@
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.6",
     "@prisma/client": "^6.19.1",
+    "ajv-errors": "^3.0.0",
     "bcryptjs": "^3.0.3",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
