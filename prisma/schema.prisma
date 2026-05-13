@@ -70,6 +70,7 @@ model Group {
   
   members       GroupMember[]
   loans         Loan[]
+  collections   Collection[]
 
   createdBy     String
   updatedBy     String?
@@ -197,4 +198,33 @@ enum PaymentStatus {
   PARTIAL
   PAID
   OVERDUE
+}
+
+model Collection {
+  id               String   @id @default(cuid())
+  groupId          String
+  group            Group    @relation(fields: [groupId], references: [id])
+  date             DateTime
+  instalmentNumber Int
+  collectorId      String
+  amountCollected  Decimal  @db.Decimal(10, 2)
+  bankReference    String?
+  breakdownNotes   String?  @db.Text
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("collections")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String
+  userId    String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
 }

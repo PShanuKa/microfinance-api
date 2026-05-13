@@ -249,6 +249,54 @@ export default async function groupRoutes(fastify, opts) {
     },
   });
 
+  // Get Collection Sheet (Members + their current dues)
+  fastify.get("/:id/collection-sheet", async (request, reply) => {
+    const { id: groupId } = request.params;
+    const { week } = request.query;
+
+    const group = await fastify.prisma.group.findUnique({
+      where: { id: groupId },
+      include: {
+        members: {
+          include: {
+            client: {
+              include: {
+                instalments: {
+                  where: {
+                    loan: { 
+                      groupId,
+                      status: "APPROVED" 
+                    },
+                    weekNumber: week ? Number(week) : undefined,
+                  },
+                  orderBy: { weekNumber: "asc" }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!group) throw createNotFoundError("Group not found");
+
+    const members = group.members.map(m => {
+      // Find the instalment for the requested week
+      const targetInstalment = m.client.instalments.find(i => i.weekNumber === Number(week));
+      
+      return {
+        clientId: m.clientId,
+        fullname: m.client.fullname,
+        isLeader: m.isLeader,
+        dueAmount: targetInstalment ? Number(targetInstalment.dueAmount) : 0,
+        remainingDue: targetInstalment ? Number(targetInstalment.remainingDue) : 0,
+        status: targetInstalment ? targetInstalment.status : "N/A"
+      };
+    });
+
+    return { success: true, group: { name: group.name, branch: group.branch }, members };
+  });
+
   // Remove Member
   fastify.delete("/members/:memberId", async (request, reply) => {
     const { memberId } = request.params;
