@@ -1,14 +1,34 @@
+// middleware/errorHandler.js
+
 export const globalErrorHandler = (fastify) => {
   fastify.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error, url: request.url }, "Global error handler");
 
-    // Validation errors (from schema)
+    // Validation errors (from Fastify schema)
     if (error.validation) {
+      const formattedErrors = {};
+      error.validation.forEach((err) => {
+        // Map AJV/Fastify validation errors to field-level errors
+        const field = err.instancePath.replace("/", "") || err.params?.missingProperty;
+        if (field) {
+          formattedErrors[field] = err.message;
+        }
+      });
+
       return reply.code(400).send({
         success: false,
         error: "Validation error",
-        details: error.validation,
+        fields: formattedErrors, // Field-level errors for frontend
         statusCode: 400,
+      });
+    }
+
+    // AppError (Custom errors)
+    if (error.name === "AppError") {
+      return reply.code(error.statusCode || 400).send({
+        success: false,
+        error: error.message,
+        statusCode: error.statusCode || 400,
       });
     }
 
@@ -31,25 +51,6 @@ export const globalErrorHandler = (fastify) => {
       });
     }
 
-    // Custom Unauthorized errors (401)
-    if (error.name === "UnauthorizedError") {
-      return reply.code(401).send({
-        success: false,
-        error: error.message || "Unauthorized",
-        code: error.code, // Include error code (e.g., TOKEN_EXPIRED)
-        statusCode: 401,
-      });
-    }
-
-    // Custom Forbidden errors (403)
-    if (error.name === "AppError" && error.statusCode === 403) {
-      return reply.code(403).send({
-        success: false,
-        error: error.message || "Forbidden",
-        statusCode: 403,
-      });
-    }
-
     // Default error
     const statusCode = error.statusCode || 500;
     return reply.code(statusCode).send({
@@ -67,7 +68,6 @@ export const notFoundHandler = (fastify) => {
       success: false,
       message: "Route not found",
       path: request.url,
-      // method: request.method,
       statusCode: 404,
     });
   });
@@ -86,18 +86,6 @@ function handlePrismaError(error) {
     P2003: {
       statusCode: 400,
       message: "Foreign key constraint failed",
-    },
-    P2014: {
-      statusCode: 400,
-      message: "Invalid relation data",
-    },
-    P2000: {
-      statusCode: 400,
-      message: "The provided value is too long for the field",
-    },
-    P2001: {
-      statusCode: 404,
-      message: "Record does not exist",
     },
   };
 

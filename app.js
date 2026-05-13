@@ -13,6 +13,8 @@ import {
   notFoundHandler,
 } from "./middleware/errorHandler.js";
 import { getSystemInfo } from "./utils/systemInfo.js";
+import authRoutes from "./routes/auth/index.js";
+import userRoutes from "./routes/users/index.js";
 
 
 export async function buildApp(opts = {}) {
@@ -54,7 +56,8 @@ export async function buildApp(opts = {}) {
   globalErrorHandler(fastify);
 
   // Routes
-  // await fastify.register(authRoutes, { prefix: "/api/auth" });
+  await fastify.register(authRoutes, { prefix: "/api/auth" });
+  await fastify.register(userRoutes, { prefix: "/api/users" });
 
   fastify.get("/api/health", async (request, reply) => {
     const systemInfo = getSystemInfo();
