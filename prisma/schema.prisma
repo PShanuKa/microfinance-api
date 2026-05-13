@@ -24,6 +24,7 @@ model User {
 
   refreshTokens  RefreshToken[]
   officerGroups  Group[]        @relation("OfficerGroups")
+  approvedLoans  Loan[]         @relation("ApprovedLoans")
 
   @@map("users")
 }
@@ -52,6 +53,7 @@ model Client {
   updatedAt   DateTime @updatedAt
 
   groupMembers GroupMember[]
+  instalments  Instalment[]
 
   @@map("clients")
 }
@@ -67,6 +69,7 @@ model Group {
   status        Boolean  @default(true)
   
   members       GroupMember[]
+  loans         Loan[]
 
   createdBy     String
   updatedBy     String?
@@ -109,6 +112,54 @@ model Guarantor {
   @@map("guarantors")
 }
 
+model Loan {
+  id                   String   @id @default(cuid())
+  groupId              String
+  group                Group    @relation(fields: [groupId], references: [id])
+  
+  leaderLentAmount     Decimal   @db.Decimal(10, 2)
+  memberLentAmount     Decimal   @db.Decimal(10, 2)
+  totalWeeks           Int
+  leaderWeeklyAmount   Decimal   @db.Decimal(10, 2)
+  memberWeeklyAmount   Decimal   @db.Decimal(10, 2)
+  processingFee        Decimal   @db.Decimal(10, 2)
+  
+  status               LoanStatus @default(DRAFT)
+  rejectionReason      String?    @db.Text
+  approvedById         String?
+  approvedBy           User?      @relation("ApprovedLoans", fields: [approvedById], references: [id])
+
+  instalments          Instalment[]
+
+  createdBy            String
+  updatedBy            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("loans")
+}
+
+model Instalment {
+  id               String   @id @default(cuid())
+  loanId           String
+  loan             Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id])
+  
+  weekNumber       Int       // 1, 2, 3...
+  dueDate          DateTime  @db.Date
+  dueAmount        Decimal   @db.Decimal(10, 2)
+  paidAmount       Decimal   @default(0.00) @db.Decimal(10, 2)
+  remainingDue     Decimal   @db.Decimal(10, 2) // dueAmount - paidAmount
+  status           PaymentStatus @default(UNPAID)
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([loanId, clientId, weekNumber])
+  @@map("instalments")
+}
+
 model DBVersion {
   id        String   @id @default(cuid())
   version   String   @unique
@@ -131,4 +182,19 @@ enum ClientStatus {
   ACTIVE
   INACTIVE
   BLACKLISTED
+}
+
+enum LoanStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
 }

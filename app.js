@@ -18,6 +18,7 @@ import authRoutes from "./routes/auth/index.js";
 import userRoutes from "./routes/users/index.js";
 import clientRoutes from "./routes/clients/index.js";
 import groupRoutes from "./routes/groups/index.js";
+import loanRoutes from "./routes/loans/index.js";
 
 
 export async function buildApp(opts = {}) {
@@ -69,6 +70,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(userRoutes, { prefix: "/api/users" });
   await fastify.register(clientRoutes, { prefix: "/api/clients" });
   await fastify.register(groupRoutes, { prefix: "/api/groups" });
+  await fastify.register(loanRoutes, { prefix: "/api/loans" });
 
   fastify.get("/api/health", async (request, reply) => {
     const systemInfo = getSystemInfo();
