@@ -97,6 +97,9 @@ export default async function groupRoutes(fastify, opts) {
             guarantors: true,
           },
         },
+        loans: {
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 

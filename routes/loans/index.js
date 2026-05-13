@@ -155,6 +155,112 @@ export default async function loanRoutes(fastify, opts) {
     },
   });
 
+  // Helper function to generate instalments
+  const generateInstalments = async (prisma, loan, group, totalWeeks, leaderWeeklyAmount, memberWeeklyAmount) => {
+    const instalments = [];
+    const targetDay = group.collectionDay === 7 ? 0 : group.collectionDay;
+    let firstDueDate = nextDay(new Date(loan.createdAt), targetDay);
+    firstDueDate = startOfDay(firstDueDate);
+
+    for (let week = 1; week <= totalWeeks; week++) {
+      const dueDate = addDays(firstDueDate, (week - 1) * 7);
+      for (const member of group.members) {
+        const dueAmount = member.isLeader ? leaderWeeklyAmount : memberWeeklyAmount;
+        instalments.push({
+          loanId: loan.id,
+          clientId: member.clientId,
+          weekNumber: week,
+          dueDate,
+          dueAmount,
+          remainingDue: dueAmount,
+          status: "UNPAID",
+        });
+      }
+    }
+    return instalments;
+  };
+
+  // Update Loan Schedule (All Fields)
+  fastify.put("/:id/schedule", {
+    schema: {
+      params: { type: "object", properties: { id: { type: "string" } } },
+      body: {
+        type: "object",
+        required: [
+          "groupId",
+          "totalWeeks", 
+          "leaderWeeklyAmount", 
+          "memberWeeklyAmount",
+          "processingFee",
+          "leaderLentAmount",
+          "memberLentAmount"
+        ],
+        properties: {
+          groupId: { type: "string" },
+          totalWeeks: { type: "number", minimum: 1 },
+          leaderWeeklyAmount: { type: "number" },
+          memberWeeklyAmount: { type: "number" },
+          processingFee: { type: "number" },
+          leaderLentAmount: { type: "number" },
+          memberLentAmount: { type: "number" },
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params;
+      const data = request.body;
+
+      const loan = await fastify.prisma.loan.findUnique({
+        where: { id },
+      });
+
+      if (!loan) throw createNotFoundError("Loan not found");
+      if (loan.status !== "PENDING") throw createBadRequestError("Only pending loans can be edited");
+
+      // Fetch the group (either existing or new one)
+      const group = await fastify.prisma.group.findUnique({
+        where: { id: data.groupId },
+        include: { members: true }
+      });
+      if (!group) throw createNotFoundError("Group not found");
+      if (group.members.length === 0) throw createBadRequestError("Selected group has no members");
+
+      return await fastify.prisma.$transaction(async (tx) => {
+        // 1. Delete existing instalments
+        await tx.instalment.deleteMany({ where: { loanId: id } });
+
+        // 2. Generate new instalments with potentially new group/amounts
+        const newInstalmentsData = await generateInstalments(
+          tx, 
+          loan, 
+          group, 
+          data.totalWeeks, 
+          data.leaderWeeklyAmount, 
+          data.memberWeeklyAmount
+        );
+
+        // 3. Create new instalments
+        await tx.instalment.createMany({ data: newInstalmentsData });
+
+        // 4. Update loan record with all new fields
+        const updatedLoan = await tx.loan.update({
+          where: { id },
+          data: {
+            groupId: data.groupId,
+            totalWeeks: data.totalWeeks,
+            leaderWeeklyAmount: data.leaderWeeklyAmount,
+            memberWeeklyAmount: data.memberWeeklyAmount,
+            processingFee: data.processingFee,
+            leaderLentAmount: data.leaderLentAmount,
+            memberLentAmount: data.memberLentAmount,
+          }
+        });
+
+        return { success: true, loan: updatedLoan, instalmentCount: newInstalmentsData.length };
+      });
+    }
+  });
+
   // Get single loan with instalments
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;
