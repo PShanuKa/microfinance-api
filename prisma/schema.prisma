@@ -18,6 +18,7 @@ model User {
   role      Role     @default(LOAN_OFFICER)
   status    Boolean  @default(true)
   branch    Json?    // Array of branch names or IDs
+  lastLogin DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
