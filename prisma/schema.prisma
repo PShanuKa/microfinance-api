@@ -115,6 +115,7 @@ model Guarantor {
 
 model Loan {
   id                   String   @id @default(cuid())
+  loanNo               String   @unique // L-000001, etc.
   groupId              String
   group                Group    @relation(fields: [groupId], references: [id])
   

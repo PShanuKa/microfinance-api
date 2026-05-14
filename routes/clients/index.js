@@ -198,6 +198,18 @@ export default async function clientRoutes(fastify, opts) {
           include: {
             group: true
           }
+        },
+        instalments: {
+          include: {
+            loan: {
+              include: {
+                group: true
+              }
+            }
+          },
+          orderBy: {
+            dueDate: "desc"
+          }
         }
       }
     });

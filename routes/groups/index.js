@@ -32,6 +32,11 @@ export default async function groupRoutes(fastify, opts) {
           take: limit,
           include: {
             officer: { select: { id: true, fullname: true } },
+            members: {
+              include: {
+                client: { select: { fullname: true, clientNo: true, phone: true } }
+              }
+            },
             _count: { select: { members: true } },
           },
           orderBy: { createdAt: "desc" },

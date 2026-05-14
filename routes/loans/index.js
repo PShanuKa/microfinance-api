@@ -104,9 +104,21 @@ export default async function loanRoutes(fastify, opts) {
       });
       if (activeLoan) throw createBadRequestError("This group already has an active or pending loan");
 
+      // Generate Loan Number (L-000001, etc.)
+      const lastLoan = await fastify.prisma.loan.findFirst({
+        orderBy: { createdAt: "desc" },
+      });
+
+      let nextNo = 1;
+      if (lastLoan && lastLoan.loanNo?.startsWith("L-")) {
+        nextNo = parseInt(lastLoan.loanNo.split("-")[1]) + 1;
+      }
+      const loanNo = `L-${nextNo.toString().padStart(6, "0")}`;
+
       // Create Loan
       const loan = await fastify.prisma.loan.create({
         data: {
+          loanNo,
           groupId: data.groupId,
           leaderLentAmount: data.leaderLentAmount,
           memberLentAmount: data.memberLentAmount,
@@ -271,6 +283,11 @@ export default async function loanRoutes(fastify, opts) {
         group: {
           include: {
             officer: { select: { fullname: true } },
+            members: {
+              include: {
+                client: { select: { fullname: true, clientNo: true, phone: true } }
+              }
+            }
           },
         },
         approvedBy: { select: { fullname: true } },
