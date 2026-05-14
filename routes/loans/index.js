@@ -79,6 +79,7 @@ export default async function loanRoutes(fastify, opts) {
           leaderWeeklyAmount: { type: "number" },
           memberWeeklyAmount: { type: "number" },
           processingFee: { type: "number" },
+          status: { type: "string" },
           createdBy: { type: "string" },
         },
       },
@@ -113,7 +114,7 @@ export default async function loanRoutes(fastify, opts) {
           leaderWeeklyAmount: data.leaderWeeklyAmount,
           memberWeeklyAmount: data.memberWeeklyAmount,
           processingFee: data.processingFee,
-          status: "PENDING", // Start as pending for approval
+          status: data.status || "PENDING",
           createdBy: data.createdBy,
         },
       });

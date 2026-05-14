@@ -189,6 +189,7 @@ enum LoanStatus {
   DRAFT
   PENDING
   APPROVED
+  ACTIVE 
   REJECTED
   COMPLETED
 }
