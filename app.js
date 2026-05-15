@@ -1,4 +1,5 @@
 // app.js
+import "dotenv/config";
 import Fastify from "fastify";
 import ajvErrors from "ajv-errors";
 import corsPlugin from "./plugins/cors.js";
@@ -22,6 +23,8 @@ import loanRoutes from "./routes/loans/index.js";
 import collectionRoutes from "./routes/collections/index.js";
 import settingsRoutes from "./routes/settings/index.js";
 import nonCollectionWeekRoutes from "./routes/non-collection-weeks/index.js";
+import attachmentRoutes from "./routes/attachments/index.js";
+import fastifyMultipart from "@fastify/multipart";
 
 
 export async function buildApp(opts = {}) {
@@ -64,6 +67,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(corsPlugin);
   await fastify.register(swaggerPlugin);
   await fastify.register(prismaPlugin);
+  await fastify.register(fastifyMultipart);
 
   // Register global error handler
   globalErrorHandler(fastify);
@@ -77,6 +81,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(collectionRoutes, { prefix: "/api/collections" });
   await fastify.register(settingsRoutes, { prefix: "/api/settings" });
   await fastify.register(nonCollectionWeekRoutes, { prefix: "/api/non-collection-weeks" });
+  await fastify.register(attachmentRoutes, { prefix: "/api/attachments" });
 
   fastify.get("/api/health", async (request, reply) => {
     const systemInfo = getSystemInfo();

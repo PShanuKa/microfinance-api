@@ -48,5 +48,22 @@ export const envSchema = {
     JWT_REFRESH_SECRET: {
       type: "string",
     },
+    S3_ENDPOINT: {
+      type: "string",
+    },
+    S3_REGION: {
+      type: "string",
+      default: "us-east-1",
+    },
+    S3_ACCESS_KEY: {
+      type: "string",
+    },
+    S3_SECRET_KEY: {
+      type: "string",
+    },
+    S3_BUCKET: {
+      type: "string",
+      default: "microfinance-uploads",
+    },
   },
 };

@@ -38,6 +38,7 @@ export default async function clientRoutes(fastify, opts) {
           skip,
           take: limit,
           include: {
+            profileImage: true,
             groupMembers: {
               include: {
                 group: {
@@ -93,7 +94,7 @@ export default async function clientRoutes(fastify, opts) {
       },
     },
     handler: async (request, reply) => {
-      const { fullname, nic, phone, address, job, status } = request.body;
+      const { fullname, nic, phone, address, job, status, profileImageId } = request.body;
 
       const existingClient = await fastify.prisma.client.findUnique({
         where: { nic },
@@ -123,6 +124,7 @@ export default async function clientRoutes(fastify, opts) {
           address,
           job,
           status: status || "ACTIVE",
+          profileImageId,
         },
       });
 
@@ -147,6 +149,7 @@ export default async function clientRoutes(fastify, opts) {
           address: { type: "string" },
           job: { type: "string" },
           status: { type: "string", enum: ["ACTIVE", "INACTIVE", "BLACKLISTED"] },
+          profileImageId: { type: "string" },
         },
         errorMessage: {
           required: {
@@ -210,7 +213,8 @@ export default async function clientRoutes(fastify, opts) {
           orderBy: {
             dueDate: "desc"
           }
-        }
+        },
+        profileImage: true
       }
     });
     if (!client) throw createNotFoundError("Client not found");

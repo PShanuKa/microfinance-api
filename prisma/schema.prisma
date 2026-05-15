@@ -56,6 +56,9 @@ model Client {
   instalments  Instalment[]
   guarantors   Guarantor[]
 
+  profileImageId String?
+  profileImage   Attachment? @relation(fields: [profileImageId], references: [id])
+
   @@map("clients")
 }
 
@@ -259,4 +262,19 @@ model NonCollectionWeek {
   updatedAt DateTime @updatedAt
 
   @@map("non_collection_weeks")
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  fileName  String
+  fileType  String
+  fileSize  Int
+  fileUrl   String   @db.Text
+  bucket    String
+  objectKey String
+  createdAt DateTime @default(now())
+
+  clients   Client[]
+
+  @@map("attachments")
 }
