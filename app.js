@@ -21,6 +21,7 @@ import groupRoutes from "./routes/groups/index.js";
 import loanRoutes from "./routes/loans/index.js";
 import collectionRoutes from "./routes/collections/index.js";
 import settingsRoutes from "./routes/settings/index.js";
+import nonCollectionWeekRoutes from "./routes/non-collection-weeks/index.js";
 
 
 export async function buildApp(opts = {}) {
@@ -75,6 +76,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(loanRoutes, { prefix: "/api/loans" });
   await fastify.register(collectionRoutes, { prefix: "/api/collections" });
   await fastify.register(settingsRoutes, { prefix: "/api/settings" });
+  await fastify.register(nonCollectionWeekRoutes, { prefix: "/api/non-collection-weeks" });
 
   fastify.get("/api/health", async (request, reply) => {
     const systemInfo = getSystemInfo();

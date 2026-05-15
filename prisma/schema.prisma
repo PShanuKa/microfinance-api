@@ -249,3 +249,14 @@ model Settings {
 
   @@map("settings")
 }
+
+model NonCollectionWeek {
+  id        String   @id @default(cuid())
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  reason    String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("non_collection_weeks")
+}
