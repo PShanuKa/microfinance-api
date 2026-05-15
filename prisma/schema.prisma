@@ -109,10 +109,13 @@ model Guarantor {
   clientId  String
   client    Client   @relation(fields: [clientId], references: [id])
   
-  fullname  String
-  nic       String
-  phone     String
-  address   String   @db.Text
+  fullname      String
+  nic           String
+  phone         String
+  address       String   @db.Text
+  index         Int      @default(0)
+  
+  documents     GuarantorDocument[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -279,6 +282,7 @@ model Attachment {
 
   profileClients Client[] @relation("ProfileImage")
   documents      ClientDocument[]
+  guarantorDocs  GuarantorDocument[]
 
   @@map("attachments")
 }
@@ -293,4 +297,16 @@ model ClientDocument {
   createdAt    DateTime   @default(now())
 
   @@map("client_documents")
+}
+
+model GuarantorDocument {
+  id           String     @id @default(cuid())
+  guarantorId  String
+  guarantor    Guarantor  @relation(fields: [guarantorId], references: [id], onDelete: Cascade)
+  attachmentId String
+  attachment   Attachment @relation(fields: [attachmentId], references: [id])
+  type         String     // NIC_FRONT, NIC_BACK, ADDRESS_PROOF, BILLING_PROOF, OTHER, PROFILE_IMAGE
+  createdAt    DateTime   @default(now())
+
+  @@map("guarantor_documents")
 }

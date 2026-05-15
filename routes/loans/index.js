@@ -328,9 +328,8 @@ export default async function loanRoutes(fastify, opts) {
       if (!group) throw createNotFoundError("Group not found");
 
       return await fastify.prisma.$transaction(async (tx) => {
-        // 1. Delete existing instalments and guarantors
+        // 1. Delete existing instalments
         await tx.instalment.deleteMany({ where: { loanId: id } });
-        await tx.guarantor.deleteMany({ where: { loanId: id } });
 
         // 2. Generate new instalments
         const newInstalmentsData = await generateInstalments(
@@ -342,22 +341,8 @@ export default async function loanRoutes(fastify, opts) {
           data.memberWeeklyAmount
         );
 
-        // 3. Save new instalments and guarantors
+        // 3. Save new instalments
         await tx.instalment.createMany({ data: newInstalmentsData });
-        if (data.memberGuarantors) {
-          for (const item of data.memberGuarantors) {
-            await tx.guarantor.createMany({
-              data: item.guarantors.map(g => ({
-                loanId: id,
-                clientId: item.clientId,
-                fullname: g.fullname,
-                nic: g.nic,
-                phone: g.phone,
-                address: g.address,
-              })),
-            });
-          }
-        }
 
         // 4. Update loan record
         const updatedLoan = await tx.loan.update({
@@ -378,6 +363,104 @@ export default async function loanRoutes(fastify, opts) {
     }
   });
 
+  // Update Single Loan Guarantor (by member and index)
+  fastify.put("/:id/guarantors", {
+    schema: {
+      params: { type: "object", properties: { id: { type: "string" } } },
+      body: {
+        type: "object",
+        required: ["clientId", "index", "guarantor"],
+        properties: {
+          clientId: { type: "string" },
+          index: { type: "integer", minimum: 0, maximum: 1 },
+          guarantor: {
+            type: "object",
+            required: ["fullname", "nic", "phone", "address"],
+            properties: {
+              fullname: { type: "string" },
+              nic: { type: "string" },
+              phone: { type: "string" },
+              address: { type: "string" },
+              documents: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["attachmentId", "type"],
+                  properties: {
+                    attachmentId: { type: "string" },
+                    type: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params;
+      const { clientId, index, guarantor: gData } = request.body;
+
+      await fastify.prisma.$transaction(async (tx) => {
+        // 1. Delete existing guarantor at this index for this member/loan
+        // We delete documents first (automatic due to Cascade in schema)
+        await tx.guarantor.deleteMany({
+          where: {
+            loanId: id,
+            clientId: clientId,
+            index: index
+          }
+        });
+
+        // 2. Create new one
+        const { documents, ...guarantorData } = gData;
+        await tx.guarantor.create({
+          data: {
+            ...guarantorData,
+            loanId: id,
+            clientId: clientId,
+            index: index,
+            documents: documents ? {
+              create: documents.map(doc => ({
+                attachmentId: doc.attachmentId,
+                type: doc.type
+              }))
+            } : undefined
+          }
+        });
+      });
+
+      return { success: true };
+    }
+  });
+
+  // Delete Single Loan Guarantor
+  fastify.delete("/:id/guarantors/:clientId/:index", {
+    schema: {
+      params: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          clientId: { type: "string" },
+          index: { type: "integer" }
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { id, clientId, index } = request.params;
+
+      await fastify.prisma.guarantor.deleteMany({
+        where: {
+          loanId: id,
+          clientId: clientId,
+          index: Number(index)
+        }
+      });
+
+      return { success: true };
+    }
+  });
+
   // Get single loan with instalments and guarantors
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;
@@ -395,7 +478,15 @@ export default async function loanRoutes(fastify, opts) {
           },
         },
         approvedBy: { select: { fullname: true } },
-        guarantors: true,
+        guarantors: {
+          include: {
+            documents: {
+              include: {
+                attachment: true
+              }
+            }
+          }
+        },
         instalments: {
           include: {
             client: { select: { fullname: true, clientNo: true } },
