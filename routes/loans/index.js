@@ -115,6 +115,17 @@ export default async function loanRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const data = request.body;
 
+      // 1. Fetch system settings
+      let settings = await fastify.prisma.settings.findUnique({ where: { id: "default" } });
+      if (!settings) {
+        settings = await fastify.prisma.settings.create({ data: { id: "default" } });
+      }
+
+      // 2. Validate duration
+      if (data.totalWeeks < settings.minLoanWeeks || data.totalWeeks > settings.maxLoanWeeks) {
+        throw createBadRequestError(`Loan duration must be between ${settings.minLoanWeeks} and ${settings.maxLoanWeeks} weeks.`);
+      }
+
       const group = await fastify.prisma.group.findUnique({
         where: { id: data.groupId },
         include: { members: true },
@@ -123,14 +134,16 @@ export default async function loanRoutes(fastify, opts) {
       if (!group) throw createNotFoundError("Group not found");
       if (group.members.length === 0) throw createBadRequestError("Group has no members");
 
-      // Check if there's an active loan for this group already
-      const activeLoan = await fastify.prisma.loan.findFirst({
+      // 3. Check if there's an active loan for this group already (Max Limit)
+      const activeLoansCount = await fastify.prisma.loan.count({
         where: { 
           groupId: data.groupId,
           status: { in: ["PENDING", "APPROVED", "ACTIVE"] }
         }
       });
-      if (activeLoan) throw createBadRequestError("This group already has an active or pending loan");
+      if (activeLoansCount >= settings.maxActiveLoansGroup) {
+        throw createBadRequestError(`This group already has ${activeLoansCount} active or pending loan(s). Limit is ${settings.maxActiveLoansGroup}.`);
+      }
 
       return await fastify.prisma.$transaction(async (tx) => {
         // Generate Loan Number
@@ -282,6 +295,15 @@ export default async function loanRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const { id } = request.params;
       const data = request.body;
+
+      // 1. Fetch system settings
+      let settings = await fastify.prisma.settings.findUnique({ where: { id: "default" } });
+      if (!settings) settings = { minLoanWeeks: 4, maxLoanWeeks: 52 };
+
+      // 2. Validate duration
+      if (data.totalWeeks < settings.minLoanWeeks || data.totalWeeks > settings.maxLoanWeeks) {
+        throw createBadRequestError(`Loan duration must be between ${settings.minLoanWeeks} and ${settings.maxLoanWeeks} weeks.`);
+      }
 
       const loan = await fastify.prisma.loan.findUnique({
         where: { id },

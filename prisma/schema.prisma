@@ -232,3 +232,20 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model Settings {
+  id                   String   @id @default("default")
+  
+  // Blacklist Settings
+  lateWeeksFlag        Int      @default(3)
+  
+  // Loan Settings
+  minLoanWeeks         Int      @default(4)
+  maxLoanWeeks         Int      @default(52)
+  defaultLoanWeeks     Int      @default(50)
+  maxActiveLoansGroup  Int      @default(1)
+  
+  updatedAt            DateTime @updatedAt
+
+  @@map("settings")
+}
