@@ -282,4 +282,48 @@ export default async function clientRoutes(fastify, opts) {
     if (!client) throw createNotFoundError("Client not found");
     return { success: true, client };
   });
+
+  // Delete Client
+  fastify.delete("/:id", {
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params;
+
+      const client = await fastify.prisma.client.findUnique({
+        where: { id },
+        include: {
+          groupMembers: true,
+          instalments: true,
+          guarantors: true,
+        }
+      });
+
+      if (!client) throw createNotFoundError("Client not found");
+
+      // Business Logic: Prevent deletion if client is linked to critical data
+      if (client.groupMembers.length > 0) {
+        throw createBadRequestError("Cannot delete client because they are a member of one or more groups. Remove them from groups first.");
+      }
+
+      if (client.instalments.length > 0) {
+        throw createBadRequestError("Cannot delete client because they have loan instalments linked to their profile.");
+      }
+
+      if (client.guarantors.length > 0) {
+        throw createBadRequestError("Cannot delete client because they are acting as a guarantor for one or more loans.");
+      }
+
+      await fastify.prisma.client.delete({
+        where: { id },
+      });
+
+      return { success: true, message: "Client deleted successfully" };
+    },
+  });
 }

@@ -461,7 +461,7 @@ export default async function loanRoutes(fastify, opts) {
     }
   });
 
-  // Get single loan with instalments and guarantors
+  // Get single loan without instalments
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;
     const loan = await fastify.prisma.loan.findUnique({
@@ -487,20 +487,28 @@ export default async function loanRoutes(fastify, opts) {
             }
           }
         },
-        instalments: {
-          include: {
-            client: { select: { fullname: true, clientNo: true } },
-          },
-          orderBy: [
-            { weekNumber: "asc" },
-            { clientId: "asc" },
-          ],
-        },
       },
     });
 
     if (!loan) throw createNotFoundError("Loan not found");
     return { success: true, loan };
+  });
+
+  // Get loan instalments separately
+  fastify.get("/:id/instalments", async (request, reply) => {
+    const { id } = request.params;
+    const instalments = await fastify.prisma.instalment.findMany({
+      where: { loanId: id },
+      include: {
+        client: { select: { fullname: true, clientNo: true } },
+      },
+      orderBy: [
+        { weekNumber: "asc" },
+        { clientId: "asc" },
+      ],
+    });
+
+    return { success: true, instalments };
   });
 
   // Approve Loan
