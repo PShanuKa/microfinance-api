@@ -38,7 +38,16 @@ export default async function loanRoutes(fastify, opts) {
           skip,
           take: limit,
           include: {
-            group: { select: { name: true, branch: true } },
+            group: { 
+              include: { 
+                members: {
+                  where: { isLeader: true },
+                  include: {
+                    client: { select: { fullname: true, phone: true } }
+                  }
+                }
+              }
+            },
             approvedBy: { select: { fullname: true } },
           },
           orderBy: { createdAt: "desc" },
