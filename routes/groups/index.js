@@ -89,7 +89,7 @@ export default async function groupRoutes(fastify, opts) {
     },
   });
 
-  // Get single group with members and guarantors
+  // Get single group with members
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;
     const group = await fastify.prisma.group.findUnique({
@@ -99,7 +99,6 @@ export default async function groupRoutes(fastify, opts) {
         members: {
           include: {
             client: true,
-            guarantors: true,
           },
         },
         loans: {
@@ -177,14 +176,14 @@ export default async function groupRoutes(fastify, opts) {
           clientId,
           isLeader,
         },
-        include: { client: true, guarantors: true },
+        include: { client: true },
       });
 
       return { success: true, member };
     },
   });
 
-  // Update Member (Leader status, Guarantors)
+  // Update Member (Leader status)
   fastify.put("/members/:memberId", {
     schema: {
       params: { type: "object", properties: { memberId: { type: "string" } } },
@@ -192,26 +191,12 @@ export default async function groupRoutes(fastify, opts) {
         type: "object",
         properties: {
           isLeader: { type: "boolean" },
-          guarantors: { 
-            type: "array", 
-            items: {
-              type: "object",
-              required: ["fullname", "nic", "phone", "address"],
-              properties: {
-                id: { type: "string" }, // Optional for existing ones
-                fullname: { type: "string" },
-                nic: { type: "string" },
-                phone: { type: "string" },
-                address: { type: "string" },
-              }
-            }
-          },
         },
       },
     },
     handler: async (request, reply) => {
       const { memberId } = request.params;
-      const { isLeader, guarantors } = request.body;
+      const { isLeader } = request.body;
 
       const member = await fastify.prisma.groupMember.findUnique({
         where: { id: memberId },
@@ -226,28 +211,12 @@ export default async function groupRoutes(fastify, opts) {
         });
       }
 
-      // Handle guarantors update
-      if (guarantors) {
-        // Simple approach: Delete existing and re-create (or more complex sync)
-        // Given it's only 2, sync is manageable.
-        await fastify.prisma.guarantor.deleteMany({ where: { memberId } });
-        await fastify.prisma.guarantor.createMany({
-          data: guarantors.map(g => ({
-            memberId,
-            fullname: g.fullname,
-            nic: g.nic,
-            phone: g.phone,
-            address: g.address,
-          })),
-        });
-      }
-
       const updatedMember = await fastify.prisma.groupMember.update({
         where: { id: memberId },
         data: {
           isLeader: isLeader !== undefined ? isLeader : member.isLeader,
         },
-        include: { client: true, guarantors: true },
+        include: { client: true },
       });
 
       return { success: true, member: updatedMember };

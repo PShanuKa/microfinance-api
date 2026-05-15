@@ -54,6 +54,7 @@ model Client {
 
   groupMembers GroupMember[]
   instalments  Instalment[]
+  guarantors   Guarantor[]
 
   @@map("clients")
 }
@@ -88,8 +89,6 @@ model GroupMember {
   client    Client   @relation(fields: [clientId], references: [id])
   isLeader  Boolean  @default(false)
   
-  guarantors Guarantor[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -99,8 +98,10 @@ model GroupMember {
 
 model Guarantor {
   id        String   @id @default(cuid())
-  memberId  String
-  member    GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  loanId    String
+  loan      Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
   
   fullname  String
   nic       String
@@ -132,6 +133,7 @@ model Loan {
   approvedBy           User?      @relation("ApprovedLoans", fields: [approvedById], references: [id])
 
   instalments          Instalment[]
+  guarantors           Guarantor[]
 
   createdBy            String
   updatedBy            String?

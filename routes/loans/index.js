@@ -23,7 +23,10 @@ export default async function loanRoutes(fastify, opts) {
       const where = {
         AND: [
           search ? {
-            group: { name: { contains: search } }
+            OR: [
+              { loanNo: { contains: search } },
+              { group: { name: { contains: search } } }
+            ]
           } : {},
           status && status !== "All" ? { status } : {},
         ],
@@ -81,6 +84,31 @@ export default async function loanRoutes(fastify, opts) {
           processingFee: { type: "number" },
           status: { type: "string" },
           createdBy: { type: "string" },
+          memberGuarantors: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["clientId", "guarantors"],
+              properties: {
+                clientId: { type: "string" },
+                guarantors: {
+                  type: "array",
+                  minItems: 2,
+                  maxItems: 2,
+                  items: {
+                    type: "object",
+                    required: ["fullname", "nic", "phone", "address"],
+                    properties: {
+                      fullname: { type: "string" },
+                      nic: { type: "string" },
+                      phone: { type: "string" },
+                      address: { type: "string" },
+                    }
+                  }
+                }
+              }
+            }
+          }
         },
       },
     },
@@ -99,77 +127,86 @@ export default async function loanRoutes(fastify, opts) {
       const activeLoan = await fastify.prisma.loan.findFirst({
         where: { 
           groupId: data.groupId,
-          status: { in: ["PENDING", "APPROVED"] }
+          status: { in: ["PENDING", "APPROVED", "ACTIVE"] }
         }
       });
       if (activeLoan) throw createBadRequestError("This group already has an active or pending loan");
 
-      // Generate Loan Number (L-000001, etc.)
-      const lastLoan = await fastify.prisma.loan.findFirst({
-        orderBy: { createdAt: "desc" },
-      });
+      return await fastify.prisma.$transaction(async (tx) => {
+        // Generate Loan Number
+        const lastLoan = await tx.loan.findFirst({
+          orderBy: { createdAt: "desc" },
+        });
 
-      let nextNo = 1;
-      if (lastLoan && lastLoan.loanNo?.startsWith("L-")) {
-        nextNo = parseInt(lastLoan.loanNo.split("-")[1]) + 1;
-      }
-      const loanNo = `L-${nextNo.toString().padStart(6, "0")}`;
-
-      // Create Loan
-      const loan = await fastify.prisma.loan.create({
-        data: {
-          loanNo,
-          groupId: data.groupId,
-          leaderLentAmount: data.leaderLentAmount,
-          memberLentAmount: data.memberLentAmount,
-          totalWeeks: data.totalWeeks,
-          leaderWeeklyAmount: data.leaderWeeklyAmount,
-          memberWeeklyAmount: data.memberWeeklyAmount,
-          processingFee: data.processingFee,
-          status: data.status || "PENDING",
-          createdBy: data.createdBy,
-        },
-      });
-
-      // Generate Instalments
-      const instalments = [];
-      
-      // Calculate first payment date (next occurrence of collectionDay)
-      // Prisma collectionDay is 1 (Mon) to 7 (Sun). 
-      // date-fns nextDay uses 0 (Sun) to 6 (Sat).
-      const targetDay = group.collectionDay === 7 ? 0 : group.collectionDay;
-      let firstDueDate = nextDay(new Date(), targetDay);
-      firstDueDate = startOfDay(firstDueDate);
-
-      for (let week = 1; week <= data.totalWeeks; week++) {
-        const dueDate = addDays(firstDueDate, (week - 1) * 7);
-        
-        for (const member of group.members) {
-          const dueAmount = member.isLeader ? data.leaderWeeklyAmount : data.memberWeeklyAmount;
-          
-          instalments.push({
-            loanId: loan.id,
-            clientId: member.clientId,
-            weekNumber: week,
-            dueDate,
-            dueAmount,
-            remainingDue: dueAmount,
-            status: "UNPAID",
-          });
+        let nextNo = 1;
+        if (lastLoan && lastLoan.loanNo?.startsWith("L-")) {
+          nextNo = parseInt(lastLoan.loanNo.split("-")[1]) + 1;
         }
-      }
+        const loanNo = `L-${nextNo.toString().padStart(6, "0")}`;
 
-      // Bulk create instalments
-      await fastify.prisma.instalment.createMany({
-        data: instalments,
+        // Create Loan
+        const loan = await tx.loan.create({
+          data: {
+            loanNo,
+            groupId: data.groupId,
+            leaderLentAmount: data.leaderLentAmount,
+            memberLentAmount: data.memberLentAmount,
+            totalWeeks: data.totalWeeks,
+            leaderWeeklyAmount: data.leaderWeeklyAmount,
+            memberWeeklyAmount: data.memberWeeklyAmount,
+            processingFee: data.processingFee,
+            status: data.status || "PENDING",
+            createdBy: data.createdBy,
+          },
+        });
+
+        // Save Guarantors
+        if (data.memberGuarantors) {
+          for (const item of data.memberGuarantors) {
+            await tx.guarantor.createMany({
+              data: item.guarantors.map(g => ({
+                loanId: loan.id,
+                clientId: item.clientId,
+                fullname: g.fullname,
+                nic: g.nic,
+                phone: g.phone,
+                address: g.address,
+              })),
+            });
+          }
+        }
+
+        // Generate Instalments
+        const instalments = [];
+        const targetDay = group.collectionDay === 7 ? 0 : group.collectionDay;
+        let firstDueDate = nextDay(new Date(), targetDay);
+        firstDueDate = startOfDay(firstDueDate);
+
+        for (let week = 1; week <= data.totalWeeks; week++) {
+          const dueDate = addDays(firstDueDate, (week - 1) * 7);
+          for (const member of group.members) {
+            const dueAmount = member.isLeader ? data.leaderWeeklyAmount : data.memberWeeklyAmount;
+            instalments.push({
+              loanId: loan.id,
+              clientId: member.clientId,
+              weekNumber: week,
+              dueDate,
+              dueAmount,
+              remainingDue: dueAmount,
+              status: "UNPAID",
+            });
+          }
+        }
+
+        await tx.instalment.createMany({ data: instalments });
+
+        return { success: true, loan, instalmentCount: instalments.length };
       });
-
-      return { success: true, loan, instalmentCount: instalments.length };
     },
   });
 
   // Helper function to generate instalments
-  const generateInstalments = async (prisma, loan, group, totalWeeks, leaderWeeklyAmount, memberWeeklyAmount) => {
+  const generateInstalments = async (tx, loan, group, totalWeeks, leaderWeeklyAmount, memberWeeklyAmount) => {
     const instalments = [];
     const targetDay = group.collectionDay === 7 ? 0 : group.collectionDay;
     let firstDueDate = nextDay(new Date(loan.createdAt), targetDay);
@@ -193,7 +230,7 @@ export default async function loanRoutes(fastify, opts) {
     return instalments;
   };
 
-  // Update Loan Schedule (All Fields)
+  // Update Loan Schedule (All Fields + Guarantors)
   fastify.put("/:id/schedule", {
     schema: {
       params: { type: "object", properties: { id: { type: "string" } } },
@@ -216,6 +253,29 @@ export default async function loanRoutes(fastify, opts) {
           processingFee: { type: "number" },
           leaderLentAmount: { type: "number" },
           memberLentAmount: { type: "number" },
+          memberGuarantors: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["clientId", "guarantors"],
+              properties: {
+                clientId: { type: "string" },
+                guarantors: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["fullname", "nic", "phone", "address"],
+                    properties: {
+                      fullname: { type: "string" },
+                      nic: { type: "string" },
+                      phone: { type: "string" },
+                      address: { type: "string" },
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -228,21 +288,20 @@ export default async function loanRoutes(fastify, opts) {
       });
 
       if (!loan) throw createNotFoundError("Loan not found");
-      if (loan.status !== "PENDING") throw createBadRequestError("Only pending loans can be edited");
+      if (loan.status !== "PENDING" && loan.status !== "DRAFT") throw createBadRequestError("Only pending or draft loans can be edited");
 
-      // Fetch the group (either existing or new one)
       const group = await fastify.prisma.group.findUnique({
         where: { id: data.groupId },
         include: { members: true }
       });
       if (!group) throw createNotFoundError("Group not found");
-      if (group.members.length === 0) throw createBadRequestError("Selected group has no members");
 
       return await fastify.prisma.$transaction(async (tx) => {
-        // 1. Delete existing instalments
+        // 1. Delete existing instalments and guarantors
         await tx.instalment.deleteMany({ where: { loanId: id } });
+        await tx.guarantor.deleteMany({ where: { loanId: id } });
 
-        // 2. Generate new instalments with potentially new group/amounts
+        // 2. Generate new instalments
         const newInstalmentsData = await generateInstalments(
           tx, 
           loan, 
@@ -252,10 +311,24 @@ export default async function loanRoutes(fastify, opts) {
           data.memberWeeklyAmount
         );
 
-        // 3. Create new instalments
+        // 3. Save new instalments and guarantors
         await tx.instalment.createMany({ data: newInstalmentsData });
+        if (data.memberGuarantors) {
+          for (const item of data.memberGuarantors) {
+            await tx.guarantor.createMany({
+              data: item.guarantors.map(g => ({
+                loanId: id,
+                clientId: item.clientId,
+                fullname: g.fullname,
+                nic: g.nic,
+                phone: g.phone,
+                address: g.address,
+              })),
+            });
+          }
+        }
 
-        // 4. Update loan record with all new fields
+        // 4. Update loan record
         const updatedLoan = await tx.loan.update({
           where: { id },
           data: {
@@ -274,7 +347,7 @@ export default async function loanRoutes(fastify, opts) {
     }
   });
 
-  // Get single loan with instalments
+  // Get single loan with instalments and guarantors
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;
     const loan = await fastify.prisma.loan.findUnique({
@@ -291,6 +364,7 @@ export default async function loanRoutes(fastify, opts) {
           },
         },
         approvedBy: { select: { fullname: true } },
+        guarantors: true,
         instalments: {
           include: {
             client: { select: { fullname: true, clientNo: true } },
