@@ -57,7 +57,9 @@ model Client {
   guarantors   Guarantor[]
 
   profileImageId String?
-  profileImage   Attachment? @relation(fields: [profileImageId], references: [id])
+  profileImage   Attachment? @relation("ProfileImage", fields: [profileImageId], references: [id])
+
+  documents      ClientDocument[]
 
   @@map("clients")
 }
@@ -274,7 +276,20 @@ model Attachment {
   objectKey String
   createdAt DateTime @default(now())
 
-  clients   Client[]
+  profileClients Client[] @relation("ProfileImage")
+  documents      ClientDocument[]
 
   @@map("attachments")
+}
+
+model ClientDocument {
+  id           String     @id @default(cuid())
+  clientId     String
+  client       Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  attachmentId String
+  attachment   Attachment @relation(fields: [attachmentId], references: [id])
+  type         String     // NIC_FRONT, NIC_BACK, ADDRESS_PROOF, BILLING_PROOF, OTHER
+  createdAt    DateTime   @default(now())
+
+  @@map("client_documents")
 }

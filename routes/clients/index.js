@@ -39,6 +39,9 @@ export default async function clientRoutes(fastify, opts) {
           take: limit,
           include: {
             profileImage: true,
+            documents: {
+              include: { attachment: true }
+            },
             groupMembers: {
               include: {
                 group: {
@@ -76,8 +79,19 @@ export default async function clientRoutes(fastify, opts) {
           nic: { type: "string", minLength: 9 },
           phone: { type: "string", minLength: 8 },
           address: { type: "string" },
-          job: { type: "string" },
           status: { type: "string", enum: ["ACTIVE", "INACTIVE", "BLACKLISTED"] },
+          profileImageId: { type: "string" },
+          documents: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["attachmentId", "type"],
+              properties: {
+                attachmentId: { type: "string" },
+                type: { type: "string" }
+              }
+            }
+          }
         },
         errorMessage: {
           required: {
@@ -94,7 +108,7 @@ export default async function clientRoutes(fastify, opts) {
       },
     },
     handler: async (request, reply) => {
-      const { fullname, nic, phone, address, job, status, profileImageId } = request.body;
+      const { fullname, nic, phone, address, job, status, profileImageId, documents } = request.body;
 
       const existingClient = await fastify.prisma.client.findUnique({
         where: { nic },
@@ -125,9 +139,20 @@ export default async function clientRoutes(fastify, opts) {
           job,
           status: status || "ACTIVE",
           ...(profileImageId ? { profileImage: { connect: { id: profileImageId } } } : {}),
+          ...(documents && documents.length > 0 ? {
+            documents: {
+              create: documents.map(doc => ({
+                attachmentId: doc.attachmentId,
+                type: doc.type
+              }))
+            }
+          } : {})
         },
         include: {
-          profileImage: true
+          profileImage: true,
+          documents: {
+            include: { attachment: true }
+          }
         }
       });
 
@@ -153,6 +178,17 @@ export default async function clientRoutes(fastify, opts) {
           job: { type: "string" },
           status: { type: "string", enum: ["ACTIVE", "INACTIVE", "BLACKLISTED"] },
           profileImageId: { type: "string" },
+          documents: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["attachmentId", "type"],
+              properties: {
+                attachmentId: { type: "string" },
+                type: { type: "string" }
+              }
+            }
+          }
         },
         errorMessage: {
           required: {
@@ -185,16 +221,28 @@ export default async function clientRoutes(fastify, opts) {
         }
       }
 
-      const { profileImageId, profileImage, groupMembers, instalments, ...rest } = data;
+      const { profileImageId, profileImage, groupMembers, instalments, documents, ...rest } = data;
 
       const updatedClient = await fastify.prisma.client.update({
         where: { id },
         data: {
           ...rest,
           ...(profileImageId ? { profileImage: { connect: { id: profileImageId } } } : {}),
+          ...(documents ? {
+            documents: {
+              deleteMany: {},
+              create: documents.map(doc => ({
+                attachmentId: doc.attachmentId,
+                type: doc.type
+              }))
+            }
+          } : {})
         },
         include: {
-          profileImage: true
+          profileImage: true,
+          documents: {
+            include: { attachment: true }
+          }
         }
       });
 
@@ -225,7 +273,10 @@ export default async function clientRoutes(fastify, opts) {
             dueDate: "desc"
           }
         },
-        profileImage: true
+        profileImage: true,
+        documents: {
+          include: { attachment: true }
+        }
       }
     });
     if (!client) throw createNotFoundError("Client not found");
