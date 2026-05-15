@@ -66,6 +66,7 @@ export default async function groupRoutes(fastify, opts) {
         properties: {
           name: { type: "string", minLength: 3 },
           branch: { type: "string" },
+          location: { type: "string" },
           collectionDay: { type: "number", minimum: 1, maximum: 7 },
           officerId: { type: "string" },
           createdBy: { type: "string" },
@@ -120,6 +121,7 @@ export default async function groupRoutes(fastify, opts) {
         properties: {
           name: { type: "string" },
           branch: { type: "string" },
+          location: { type: "string" },
           collectionDay: { type: "number" },
           officerId: { type: "string" },
           status: { type: "boolean" },

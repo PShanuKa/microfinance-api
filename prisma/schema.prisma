@@ -68,6 +68,7 @@ model Group {
   id            String   @id @default(cuid())
   name          String
   branch        String
+  location      String?
   collectionDay Int      // 1 = Monday, 7 = Sunday
   officerId     String
   officer       User     @relation("OfficerGroups", fields: [officerId], references: [id])
