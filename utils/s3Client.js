@@ -24,6 +24,7 @@ export const uploadFile = async (fileStream, fileName, contentType) => {
       Key: objectKey,
       Body: fileStream,
       ContentType: contentType,
+      ACL: "public-read",
     },
   });
 

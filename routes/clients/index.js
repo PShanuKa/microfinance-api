@@ -124,8 +124,11 @@ export default async function clientRoutes(fastify, opts) {
           address,
           job,
           status: status || "ACTIVE",
-          profileImageId,
+          ...(profileImageId ? { profileImage: { connect: { id: profileImageId } } } : {}),
         },
+        include: {
+          profileImage: true
+        }
       });
 
       return { success: true, client };
@@ -182,9 +185,17 @@ export default async function clientRoutes(fastify, opts) {
         }
       }
 
+      const { profileImageId, profileImage, groupMembers, instalments, ...rest } = data;
+
       const updatedClient = await fastify.prisma.client.update({
         where: { id },
-        data,
+        data: {
+          ...rest,
+          ...(profileImageId ? { profileImage: { connect: { id: profileImageId } } } : {}),
+        },
+        include: {
+          profileImage: true
+        }
       });
 
       return { success: true, client: updatedClient };
