@@ -155,6 +155,108 @@ export default async function collectionRoutes(fastify, opts) {
     return { success: true, collection };
   });
 
+  // Approve Collection
+  fastify.post("/:id/approve", async (request, reply) => {
+    const { id } = request.params;
+    const { approverId } = request.body || { approverId: "ADMIN" };
+
+    const result = await fastify.prisma.$transaction(async (tx) => {
+      // 1. Get collection and items
+      const collection = await tx.collection.findUnique({
+        where: { id },
+        include: { items: true }
+      });
+
+      if (!collection) throw createNotFoundError("Collection not found");
+      if (collection.status !== "SUBMITTED") throw createBadRequestError("Collection is already processed");
+
+      // 2. Update Collection status
+      await tx.collection.update({
+        where: { id },
+        data: { status: "APPROVED" }
+      });
+
+      // 3. Update CollectionItems and Instalments
+      for (const item of collection.items) {
+        // Update item status
+        await tx.collectionItem.update({
+          where: { id: item.id },
+          data: { status: "APPROVED" }
+        });
+
+        // Update linked instalment
+        const inst = await tx.instalment.findUnique({
+          where: { id: item.instalmentId }
+        });
+
+        if (inst) {
+          const currentPaid = Number(inst.paidAmount);
+          const newPaid = currentPaid + Number(item.amount);
+          const remaining = Number(inst.dueAmount) - newPaid;
+
+          await tx.instalment.update({
+            where: { id: inst.id },
+            data: {
+              paidAmount: newPaid,
+              remainingDue: remaining > 0 ? remaining : 0,
+              status: newPaid >= Number(inst.dueAmount) ? "PAID" : 
+                      newPaid > 0 ? "PARTIAL" : "UNPAID"
+            }
+          });
+        }
+      }
+
+      // 4. Audit Log
+      await tx.auditLog.create({
+        data: {
+          action: "COLLECTION_APPROVED",
+          entity: "Collection",
+          entityId: id,
+          userId: approverId
+        }
+      });
+
+      return { success: true };
+    });
+
+    return result;
+  });
+
+  // Reject Collection
+  fastify.post("/:id/reject", async (request, reply) => {
+    const { id } = request.params;
+    const { rejecterId } = request.body || { rejecterId: "ADMIN" };
+
+    const result = await fastify.prisma.$transaction(async (tx) => {
+      const collection = await tx.collection.findUnique({ where: { id } });
+      if (!collection) throw createNotFoundError("Collection not found");
+      if (collection.status !== "SUBMITTED") throw createBadRequestError("Collection is already processed");
+
+      await tx.collection.update({
+        where: { id },
+        data: { status: "REJECTED" }
+      });
+
+      await tx.collectionItem.updateMany({
+        where: { collectionId: id },
+        data: { status: "REJECTED" }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: "COLLECTION_REJECTED",
+          entity: "Collection",
+          entityId: id,
+          userId: rejecterId
+        }
+      });
+
+      return { success: true };
+    });
+
+    return result;
+  });
+
   // Get Daily Collection Registry (Expected instalments for a specific day)
   fastify.get("/daily-registry", {
     schema: {
