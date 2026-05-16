@@ -172,4 +172,95 @@ export default async function collectionRoutes(fastify, opts) {
 
     return { success: true, collections };
   });
+
+  // Get Daily Collection Registry (Expected instalments for a specific day)
+  fastify.get("/daily-registry", {
+    schema: {
+      query: {
+        type: "object",
+        properties: {
+          date: { type: "string", format: "date" },
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { date } = request.query;
+      // const targetDate = date ? new Date(date) : new Date();
+      const targetDate = "2026-06-07";
+      
+      const start = new Date(targetDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(targetDate);
+      end.setHours(23, 59, 59, 999);
+
+      // 1. Fetch instalments due today
+      const instalments = await fastify.prisma.instalment.findMany({
+        where: {
+          dueDate: {
+            gte: start,
+            lte: end
+          },
+          loan: {
+            status: { in: ["DRAFT", "PENDING", "APPROVED", "ACTIVE"] }
+            // status: "APPROVED" // Only active/approved loans
+          }
+        },
+        include: {
+          loan: {
+            include: {
+              group: {
+                include: {
+                  members: {
+                    include: {
+                      client: { select: { fullname: true, phone: true } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+
+
+      // 2. Group by Group ID
+      const grouped = instalments.reduce((acc, inst) => {
+        const group = inst.loan.group;
+        if (!acc[group.id]) {
+          const leader = group.members.find(m => m.isLeader)?.client;
+          acc[group.id] = {
+            id: group.id,
+            groupNo: group.groupNo || "N/A",
+            groupName: group.name,
+            location: group.branch,
+            center: group.center || "Main Center",
+            leader: leader?.fullname || "No Leader",
+            phone: leader?.phone || "N/A",
+            members: group.members.length,
+            instalmentNo: inst.weekNumber,
+            expected: 0,
+            arrears: 0, // Will fetch separately if needed, or simplified here
+            collected: 0,
+            status: "Pending"
+          };
+        }
+        
+        acc[group.id].expected += Number(inst.dueAmount);
+        acc[group.id].collected += Number(inst.paidAmount);
+        
+        return acc;
+      }, {});
+
+      // 3. Finalize Status
+      const registry = Object.values(grouped).map((g) => {
+        if (g.collected >= g.expected) g.status = "Verified";
+        else if (g.collected > 0) g.status = "Pending";
+        else g.status = "Pending";
+        return g;
+      });
+
+      return { success: true, date: start.toISOString(), registry };
+    }
+  });
 }
