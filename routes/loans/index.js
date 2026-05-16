@@ -566,4 +566,35 @@ export default async function loanRoutes(fastify, opts) {
       return { success: true, loan };
     },
   });
+
+  // Update Loan Status (Generic)
+  fastify.patch("/:id/status", {
+    schema: {
+      params: { type: "object", properties: { id: { type: "string" } } },
+      body: {
+        type: "object",
+        required: ["status"],
+        properties: {
+          status: { type: "string" },
+          approvedById: { type: "string" },
+          rejectionReason: { type: "string" },
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params;
+      const { status, approvedById, rejectionReason } = request.body;
+
+      const loan = await fastify.prisma.loan.update({
+        where: { id },
+        data: {
+          status,
+          approvedById: approvedById || undefined,
+          rejectionReason: rejectionReason || undefined,
+        },
+      });
+
+      return { success: true, loan };
+    },
+  });
 }

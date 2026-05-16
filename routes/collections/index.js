@@ -359,7 +359,7 @@ export default async function collectionRoutes(fastify, opts) {
         if (g.hasPending) {
           g.status = "PENDING_APPROVAL";
         } else if (g.allPaid) {
-          g.status = "Verified";
+          g.status = "PAID";
         } else if (g.allUnpaid) {
           g.status = "UNPAID";
         } else {
