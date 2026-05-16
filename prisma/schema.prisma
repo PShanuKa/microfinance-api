@@ -66,6 +66,7 @@ model Client {
 
 model Group {
   id            String   @id @default(cuid())
+  groupNo       String?  @unique
   name          String
   branch        String
   location      String?
@@ -215,35 +216,44 @@ enum PaymentStatus {
   OVERDUE
 }
 
+enum CollectionStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
 model Collection {
-  id               String   @id @default(cuid())
+  id               String           @id @default(cuid())
   groupId          String
-  group            Group    @relation(fields: [groupId], references: [id])
+  group            Group            @relation(fields: [groupId], references: [id])
   loanId           String?
-  loan             Loan?    @relation(fields: [loanId], references: [id])
+  loan             Loan?            @relation(fields: [loanId], references: [id])
   date             DateTime
+  weekNumber       Int?
   instalmentNumber Int
   collectorId      String
-  amountCollected  Decimal  @db.Decimal(10, 2)
+  amountCollected  Decimal          @db.Decimal(10, 2)
   bankReference    String?
-  breakdownNotes   String?  @db.Text
+  breakdownNotes   String?          @db.Text
   items            CollectionItem[]
+  status           CollectionStatus @default(SUBMITTED)
   
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@map("collections")
 }
 
 model CollectionItem {
-  id           String     @id @default(cuid())
+  id           String           @id @default(cuid())
   collectionId String
-  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collection   Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   instalmentId String
-  instalment   Instalment @relation(fields: [instalmentId], references: [id])
-  amount       Decimal    @db.Decimal(10, 2)
+  instalment   Instalment       @relation(fields: [instalmentId], references: [id])
+  amount       Decimal          @db.Decimal(10, 2)
+  status       CollectionStatus @default(SUBMITTED)
   
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime         @default(now())
 
   @@map("collection_items")
 }

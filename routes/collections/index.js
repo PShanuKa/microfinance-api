@@ -12,6 +12,7 @@ export default async function collectionRoutes(fastify, opts) {
           groupId: { type: "string" },
           loanId: { type: "string" },
           date: { type: "string", format: "date-time" },
+          weekNumber: { type: "number" },
           instalmentNumber: { type: "number" },
           collectorId: { type: "string" },
           bankReference: { type: "string" },
@@ -32,7 +33,7 @@ export default async function collectionRoutes(fastify, opts) {
       }
     },
     handler: async (request, reply) => {
-      const { groupId, loanId, date, instalmentNumber, collectorId, breakdownData, bankReference, breakdownNotes } = request.body;
+      const { groupId, loanId, date, weekNumber, instalmentNumber, collectorId, breakdownData, bankReference, breakdownNotes } = request.body;
 
       // 1. Validation
       const group = await fastify.prisma.group.findUnique({
@@ -52,6 +53,7 @@ export default async function collectionRoutes(fastify, opts) {
             groupId,
             loanId,
             date: new Date(date),
+            weekNumber,
             instalmentNumber,
             collectorId,
             amountCollected: totalAmount,
@@ -65,31 +67,6 @@ export default async function collectionRoutes(fastify, opts) {
             }
           }
         });
-
-        // Update each specified instalment
-        for (const item of breakdownData) {
-          const amount = Number(item.amount);
-          if (amount <= 0) continue;
-
-          const inst = await tx.instalment.findUnique({
-            where: { id: item.instalmentId }
-          });
-
-          if (!inst) continue;
-
-          const currentPaid = Number(inst.paidAmount);
-          const newPaid = currentPaid + amount;
-          const remaining = Number(inst.dueAmount) - newPaid;
-
-          await tx.instalment.update({
-            where: { id: inst.id },
-            data: {
-              paidAmount: newPaid,
-              remainingDue: remaining > 0 ? remaining : 0,
-              status: newPaid >= Number(inst.dueAmount) ? "PAID" : "PARTIAL"
-            }
-          });
-        }
 
         // 3. Audit Log
         await tx.auditLog.create({
@@ -119,12 +96,36 @@ export default async function collectionRoutes(fastify, opts) {
     const { groupId } = request.query;
     const where = groupId ? { groupId } : {};
     
-    const collections = await fastify.prisma.collection.findMany({
+    const collectionsData = await fastify.prisma.collection.findMany({
       where,
       include: {
-        group: { select: { name: true, branch: true, groupNo: true, leaderName: true, phone: true, memberCount: true } }
+        group: { 
+          include: {
+            members: {
+              include: { client: { select: { fullname: true, phone: true } } }
+            }
+          }
+        }
       },
       orderBy: { createdAt: "desc" }
+    });
+
+    // Map data to include computed fields for frontend
+    const collections = collectionsData.map(col => {
+      const group = col.group;
+      const leader = group.members.find(m => m.isLeader)?.client;
+      
+      return {
+        ...col,
+        groupNo: group.groupNo,
+        groupName: group.name,
+        location: group.branch,
+        center: group.location || "Main Center",
+        leader: leader?.fullname || "No Leader",
+        phone: leader?.phone || "N/A",
+        members: group.members.length,
+        amountCollected: Number(col.amountCollected)
+      };
     });
 
     return { success: true, collections };
@@ -144,7 +145,7 @@ export default async function collectionRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const { date, loanId } = request.query;
       // const targetDate = date ? new Date(date) : new Date();
-      const targetDate = "2026-06-07";
+      const targetDate = "2026-06-14";
       
       const start = new Date(targetDate);
       start.setHours(0, 0, 0, 0);
@@ -165,6 +166,9 @@ export default async function collectionRoutes(fastify, opts) {
         },
         include: {
           client: { select: { fullname: true, clientNo: true } },
+          collectionItems: {
+            where: { status: "SUBMITTED" }
+          },
           loan: {
             include: {
               group: {
@@ -195,29 +199,52 @@ export default async function collectionRoutes(fastify, opts) {
             groupNo: group.groupNo || "N/A",
             groupName: group.name,
             location: group.branch,
-            center: group.center || "Main Center",
+            center: group.location || "Main Center",
             leader: leader?.fullname || "No Leader",
             phone: leader?.phone || "N/A",
             members: group.members.length,
             instalmentNo: inst.weekNumber,
             expected: 0,
-            arrears: 0,
             collected: 0,
+            hasPending: false,
+            allPaid: true,
+            allUnpaid: true,
             status: "Pending"
           };
         }
         
         acc[currentLoanId].expected += Number(inst.dueAmount);
-        acc[currentLoanId].collected += Number(inst.paidAmount);
+        
+        const pendingTotal = inst.collectionItems.reduce((sum, item) => sum + Number(item.amount), 0);
+        if (pendingTotal > 0) acc[currentLoanId].hasPending = true;
+
+        const effectivePaid = inst.status === "UNPAID" ? pendingTotal : Number(inst.paidAmount);
+        acc[currentLoanId].collected += effectivePaid;
+
+        // Track statuses for final classification
+        if (inst.status !== "PAID") acc[currentLoanId].allPaid = false;
+        if (effectivePaid > 0 || inst.status !== "UNPAID") acc[currentLoanId].allUnpaid = false;
         
         return acc;
       }, {});
 
       // 3. Finalize Status
       const registry = Object.values(grouped).map((g) => {
-        if (g.collected >= g.expected) g.status = "Verified";
-        else if (g.collected > 0) g.status = "Pending";
-        else g.status = "Pending";
+        if (g.hasPending) {
+          g.status = "PENDING_APPROVAL";
+        } else if (g.allPaid) {
+          g.status = "Verified";
+        } else if (g.allUnpaid) {
+          g.status = "UNPAID";
+        } else {
+          g.status = "PARTIAL";
+        }
+        
+        // Clean up internal tracking fields
+        delete g.hasPending;
+        delete g.allPaid;
+        delete g.allUnpaid;
+        
         return g;
       });
 
@@ -225,15 +252,26 @@ export default async function collectionRoutes(fastify, opts) {
         success: true, 
         date: start.toISOString(), 
         registry,
-        instalments: loanId ? instalments.map(i => ({
-          id: i.id,
-          weekNumber: i.weekNumber,
-          dueAmount: Number(i.dueAmount),
-          paidAmount: Number(i.paidAmount),
-          status: i.status,
-          memberName: i.client.fullname,
-          clientNo: i.client.clientNo
-        })) : []
+        instalments: loanId ? instalments.map(i => {
+          const pendingTotal = i.collectionItems.reduce((sum, item) => sum + Number(item.amount), 0);
+          const effectivePaid = i.status === "UNPAID" ? pendingTotal : Number(i.paidAmount);
+          
+          // If there's a submitted collection for an unpaid instalment, mark status as Pending
+          let effectiveStatus = i.status;
+          if (i.status === "UNPAID" && pendingTotal > 0) {
+            effectiveStatus = "Pending";
+          }
+
+          return {
+            id: i.id,
+            weekNumber: i.weekNumber,
+            dueAmount: Number(i.dueAmount),
+            paidAmount: effectivePaid,
+            status: effectiveStatus,
+            memberName: i.client.fullname,
+            clientNo: i.client.clientNo
+          };
+        }) : []
       };
     }
   });
