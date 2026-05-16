@@ -7,20 +7,32 @@ export default async function collectionRoutes(fastify, opts) {
     schema: {
       body: {
         type: "object",
-        required: ["groupId", "date", "instalmentNumber", "collectorId", "amountCollected"],
+        required: ["groupId", "date", "instalmentNumber", "collectorId"],
         properties: {
           groupId: { type: "string" },
+          loanId: { type: "string" },
           date: { type: "string", format: "date-time" },
           instalmentNumber: { type: "number" },
           collectorId: { type: "string" },
-          amountCollected: { type: "number", minimum: 0 },
           bankReference: { type: "string" },
           breakdownNotes: { type: "string" },
+          breakdownData: { 
+            type: "array",
+            items: {
+              type: "object",
+              required: ["instalmentId", "amount"],
+              properties: {
+                instalmentId: { type: "string" },
+                amount: { type: "number" },
+                memberName: { type: "string" }
+              }
+            }
+          }
         }
       }
     },
     handler: async (request, reply) => {
-      const { groupId, date, instalmentNumber, collectorId, payments, bankReference, breakdownNotes } = request.body;
+      const { groupId, loanId, date, instalmentNumber, collectorId, breakdownData, bankReference, breakdownNotes } = request.body;
 
       // 1. Validation
       const group = await fastify.prisma.group.findUnique({
@@ -28,114 +40,58 @@ export default async function collectionRoutes(fastify, opts) {
       });
 
       if (!group) throw createNotFoundError("Group not found");
-      if (!payments || !Array.isArray(payments)) throw createBadRequestError("Payments list is required");
+      if (!breakdownData || !Array.isArray(breakdownData)) throw createBadRequestError("Breakdown data is required");
 
-      const totalAmount = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const totalAmount = breakdownData.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
       // 2. Wrap in Transaction
       const result = await fastify.prisma.$transaction(async (tx) => {
-        // Create Collection Record
+        // Create Collection Record with nested items
         const collection = await tx.collection.create({
           data: {
             groupId,
+            loanId,
             date: new Date(date),
             instalmentNumber,
             collectorId,
             amountCollected: totalAmount,
             bankReference,
             breakdownNotes,
+            items: {
+              create: breakdownData.map(item => ({
+                instalmentId: item.instalmentId,
+                amount: Number(item.amount)
+              }))
+            }
           }
         });
 
-        // Process each member's payment
-        for (const pay of payments) {
-          let remainingPool = Number(pay.amount);
-          if (remainingPool <= 0) continue;
+        // Update each specified instalment
+        for (const item of breakdownData) {
+          const amount = Number(item.amount);
+          if (amount <= 0) continue;
 
-          // Fetch this member's pending instalments (FIFO)
-          const pending = await tx.instalment.findMany({
-            where: {
-              clientId: pay.clientId,
-              loan: { groupId },
-              status: { in: ["UNPAID", "PARTIAL"] }
-            },
-            orderBy: [
-              { dueDate: "asc" },
-              { id: "asc" }
-            ]
+          const inst = await tx.instalment.findUnique({
+            where: { id: item.instalmentId }
           });
 
-          for (const inst of pending) {
-            if (remainingPool <= 0) break;
-            const due = Number(inst.remainingDue);
-            
-            if (remainingPool >= due) {
-              await tx.instalment.update({
-                where: { id: inst.id },
-                data: {
-                  paidAmount: inst.dueAmount,
-                  remainingDue: 0,
-                  status: "PAID"
-                }
-              });
-              remainingPool -= due;
-            } else {
-              await tx.instalment.update({
-                where: { id: inst.id },
-                data: {
-                  paidAmount: Number(inst.paidAmount) + remainingPool,
-                  remainingDue: due - remainingPool,
-                  status: "PARTIAL"
-                }
-              });
-              remainingPool = 0;
-            }
-          }
+          if (!inst) continue;
 
-          // Advance payments for this member if pool remains
-          if (remainingPool > 0) {
-            const upcoming = await tx.instalment.findMany({
-              where: {
-                clientId: pay.clientId,
-                loan: { groupId },
-                status: "UNPAID"
-              },
-              orderBy: [
-                { dueDate: "asc" },
-                { id: "asc" }
-              ]
-            });
+          const currentPaid = Number(inst.paidAmount);
+          const newPaid = currentPaid + amount;
+          const remaining = Number(inst.dueAmount) - newPaid;
 
-            for (const inst of upcoming) {
-              if (remainingPool <= 0) break;
-              const due = Number(inst.remainingDue);
-              
-              if (remainingPool >= due) {
-                await tx.instalment.update({
-                  where: { id: inst.id },
-                  data: {
-                    paidAmount: inst.dueAmount,
-                    remainingDue: 0,
-                    status: "PAID"
-                  }
-                });
-                remainingPool -= due;
-              } else {
-                await tx.instalment.update({
-                  where: { id: inst.id },
-                  data: {
-                    paidAmount: Number(inst.paidAmount) + remainingPool,
-                    remainingDue: due - remainingPool,
-                    status: "PARTIAL"
-                  }
-                });
-                remainingPool = 0;
-              }
+          await tx.instalment.update({
+            where: { id: inst.id },
+            data: {
+              paidAmount: newPaid,
+              remainingDue: remaining > 0 ? remaining : 0,
+              status: newPaid >= Number(inst.dueAmount) ? "PAID" : "PARTIAL"
             }
-          }
+          });
         }
 
-        // 6. Audit Log
+        // 3. Audit Log
         await tx.auditLog.create({
           data: {
             action: "COLLECTION_CREATED",
@@ -145,15 +101,16 @@ export default async function collectionRoutes(fastify, opts) {
             details: {
               totalAmount,
               groupId: groupId,
-              paymentCount: payments.length
+              loanId: loanId,
+              itemCount: breakdownData.length
             }
           }
         });
 
-        return { collection, totalAmount };
+        return collection;
       });
 
-      return { success: true, ...result };
+      return { success: true, collection: result };
     }
   });
 
@@ -165,7 +122,7 @@ export default async function collectionRoutes(fastify, opts) {
     const collections = await fastify.prisma.collection.findMany({
       where,
       include: {
-        group: { select: { name: true, branch: true } }
+        group: { select: { name: true, branch: true, groupNo: true, leaderName: true, phone: true, memberCount: true } }
       },
       orderBy: { createdAt: "desc" }
     });

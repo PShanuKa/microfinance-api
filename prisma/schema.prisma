@@ -149,6 +149,7 @@ model Loan {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
+  collections          Collection[]
   @@map("loans")
 }
 
@@ -169,6 +170,7 @@ model Instalment {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  collectionItems  CollectionItem[]
   @@unique([loanId, clientId, weekNumber])
   @@map("instalments")
 }
@@ -217,17 +219,33 @@ model Collection {
   id               String   @id @default(cuid())
   groupId          String
   group            Group    @relation(fields: [groupId], references: [id])
+  loanId           String?
+  loan             Loan?    @relation(fields: [loanId], references: [id])
   date             DateTime
   instalmentNumber Int
   collectorId      String
   amountCollected  Decimal  @db.Decimal(10, 2)
   bankReference    String?
   breakdownNotes   String?  @db.Text
+  items            CollectionItem[]
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@map("collections")
+}
+
+model CollectionItem {
+  id           String     @id @default(cuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  instalmentId String
+  instalment   Instalment @relation(fields: [instalmentId], references: [id])
+  amount       Decimal    @db.Decimal(10, 2)
+  
+  createdAt    DateTime   @default(now())
+
+  @@map("collection_items")
 }
 
 model AuditLog {
