@@ -87,27 +87,38 @@ export default async function groupRoutes(fastify, opts) {
     schema: {
       body: {
         type: "object",
-        required: ["name", "branch", "collectionDay", "officerId", "createdBy"],
         properties: {
-          name: { type: "string", minLength: 3 },
+          name: { type: "string" },
           branch: { type: "string" },
           location: { type: "string" },
-          collectionDay: { type: "number", minimum: 1, maximum: 7 },
+          collectionDay: { type: "number" },
           officerId: { type: "string" },
           createdBy: { type: "string" },
         },
-        errorMessage: {
-          required: {
-            name: "Group name is required",
-            branch: "Branch is required",
-            collectionDay: "Collection day is required",
-            officerId: "Collection officer is required"
-          }
-        }
       },
     },
     handler: async (request, reply) => {
-      const data = request.body;
+      const { name, branch, collectionDay, officerId, location, createdBy } = request.body;
+
+      // Manual validation for field-level errors (since we use setError on frontend)
+      const fields = {};
+      if (!name || name.length < 3) fields.name = "Group name must be at least 3 characters";
+      if (!branch) fields.branch = "Branch is required";
+      if (!collectionDay) fields.collectionDay = "Collection day is required";
+      if (!officerId) fields.officerId = "Collection officer is required";
+
+      if (Object.keys(fields).length > 0) {
+        throw createBadRequestError("Validation error", fields);
+      }
+
+      // Check if officer exists
+      const officer = await fastify.prisma.user.findUnique({
+        where: { id: officerId }
+      });
+
+      if (!officer) {
+        throw createBadRequestError("Validation error", { officerId: "Selected officer does not exist" });
+      }
 
       // Auto-generate Group ID (G-001, G-002, etc.)
       const lastGroup = await fastify.prisma.group.findFirst({
@@ -122,7 +133,12 @@ export default async function groupRoutes(fastify, opts) {
 
       const group = await fastify.prisma.group.create({
         data: {
-          ...data,
+          name,
+          branch,
+          collectionDay,
+          officerId,
+          location,
+          createdBy,
           groupNo,
         },
       });
@@ -171,11 +187,46 @@ export default async function groupRoutes(fastify, opts) {
     },
     handler: async (request, reply) => {
       const { id } = request.params;
-      const data = request.body;
+      const { name, branch, collectionDay, officerId, location, status, updatedBy } = request.body;
+
+      // Check if group has associated loans
+      const existingLoan = await fastify.prisma.loan.findFirst({
+        where: { groupId: id }
+      });
+
+      if (existingLoan) {
+        throw createBadRequestError("Cannot update group information because it is associated with loan applications");
+      }
+
+      // Manual validation for field-level errors
+      const fields = {};
+      if (name !== undefined && name.length < 3) fields.name = "Group name must be at least 3 characters";
+      if (branch === "") fields.branch = "Branch cannot be empty";
+      
+      if (Object.keys(fields).length > 0) {
+        throw createBadRequestError("Validation error", fields);
+      }
+
+      if (officerId) {
+        const officer = await fastify.prisma.user.findUnique({
+          where: { id: officerId }
+        });
+        if (!officer) {
+          throw createBadRequestError("Validation error", { officerId: "Selected officer does not exist" });
+        }
+      }
 
       const group = await fastify.prisma.group.update({
         where: { id },
-        data,
+        data: {
+          name,
+          branch,
+          collectionDay,
+          officerId,
+          location,
+          status,
+          updatedBy,
+        },
       });
 
       return { success: true, group };
@@ -198,6 +249,15 @@ export default async function groupRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const { id: groupId } = request.params;
       const { clientId, isLeader } = request.body;
+
+      // Check if group has associated loans
+      const existingLoan = await fastify.prisma.loan.findFirst({
+        where: { groupId }
+      });
+
+      if (existingLoan) {
+        throw createBadRequestError("Cannot add new members to this group because it is associated with loan applications");
+      }
 
       const existing = await fastify.prisma.groupMember.findUnique({
         where: { groupId_clientId: { groupId, clientId } },
@@ -245,6 +305,15 @@ export default async function groupRoutes(fastify, opts) {
       });
 
       if (!member) throw createNotFoundError("Member not found");
+
+      // Check if group has associated loans
+      const existingLoan = await fastify.prisma.loan.findFirst({
+        where: { groupId: member.groupId }
+      });
+
+      if (existingLoan) {
+        throw createBadRequestError("Cannot update member information because this group is associated with loan applications");
+      }
 
       if (isLeader === true) {
         await fastify.prisma.groupMember.updateMany({
@@ -316,6 +385,22 @@ export default async function groupRoutes(fastify, opts) {
   // Remove Member
   fastify.delete("/members/:memberId", async (request, reply) => {
     const { memberId } = request.params;
+
+    const member = await fastify.prisma.groupMember.findUnique({
+      where: { id: memberId },
+    });
+
+    if (!member) throw createNotFoundError("Member not found");
+
+    // Check if group has associated loans
+    const existingLoan = await fastify.prisma.loan.findFirst({
+      where: { groupId: member.groupId }
+    });
+
+    if (existingLoan) {
+      throw createBadRequestError("Cannot remove member because this group is associated with loan applications");
+    }
+
     await fastify.prisma.groupMember.delete({ where: { id: memberId } });
     return { success: true, message: "Member removed" };
   });

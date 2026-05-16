@@ -3,6 +3,8 @@ import { createBadRequestError, createNotFoundError } from "../../utils/errors.j
 import { addDays, nextDay, startOfDay } from "date-fns";
 
 export default async function loanRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
+
   // Get all loans with pagination
   fastify.get("/", {
     schema: {
@@ -222,6 +224,17 @@ export default async function loanRoutes(fastify, opts) {
 
         await tx.instalment.createMany({ data: instalments });
 
+        // Audit Log
+        await tx.auditLog.create({
+          data: {
+            action: "LOAN_CREATE",
+            entity: "LOAN",
+            entityId: loan.id,
+            userId: request.user.id,
+            details: { loanNo: loan.loanNo, groupId: loan.groupId }
+          }
+        });
+
         return { success: true, loan, instalmentCount: instalments.length };
       });
     },
@@ -358,6 +371,21 @@ export default async function loanRoutes(fastify, opts) {
           }
         });
 
+        // Audit Log
+        await tx.auditLog.create({
+          data: {
+            action: "LOAN_SCHEDULE_UPDATE",
+            entity: "LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { 
+              totalWeeks: data.totalWeeks, 
+              leaderWeekly: data.leaderWeeklyAmount, 
+              memberWeekly: data.memberWeeklyAmount 
+            }
+          }
+        });
+
         return { success: true, loan: updatedLoan, instalmentCount: newInstalmentsData.length };
       });
     }
@@ -414,7 +442,7 @@ export default async function loanRoutes(fastify, opts) {
 
         // 2. Create new one
         const { documents, ...guarantorData } = gData;
-        await tx.guarantor.create({
+        const guarantor = await tx.guarantor.create({
           data: {
             ...guarantorData,
             loanId: id,
@@ -426,6 +454,17 @@ export default async function loanRoutes(fastify, opts) {
                 type: doc.type
               }))
             } : undefined
+          }
+        });
+
+        // Audit Log
+        await tx.auditLog.create({
+          data: {
+            action: "LOAN_GUARANTOR_UPDATE",
+            entity: "LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { clientId, index, guarantorName: guarantorData.fullname }
           }
         });
       });
@@ -449,12 +488,25 @@ export default async function loanRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const { id, clientId, index } = request.params;
 
-      await fastify.prisma.guarantor.deleteMany({
-        where: {
-          loanId: id,
-          clientId: clientId,
-          index: Number(index)
-        }
+      await fastify.prisma.$transaction(async (tx) => {
+        await tx.guarantor.deleteMany({
+          where: {
+            loanId: id,
+            clientId: clientId,
+            index: Number(index)
+          }
+        });
+
+        // Audit Log
+        await tx.auditLog.create({
+          data: {
+            action: "LOAN_GUARANTOR_DELETE",
+            entity: "LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { clientId, index: Number(index) }
+          }
+        });
       });
 
       return { success: true };
@@ -527,15 +579,27 @@ export default async function loanRoutes(fastify, opts) {
       const { id } = request.params;
       const { approvedById } = request.body;
 
-      const loan = await fastify.prisma.loan.update({
-        where: { id },
-        data: {
-          status: "APPROVED",
-          approvedById,
-        },
-      });
+      return await fastify.prisma.$transaction(async (tx) => {
+        const loan = await tx.loan.update({
+          where: { id },
+          data: {
+            status: "APPROVED",
+            approvedById,
+          },
+        });
 
-      return { success: true, loan };
+        await tx.auditLog.create({
+          data: {
+            action: "LOAN_APPROVE",
+            entity: "LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { loanNo: loan.loanNo, approvedBy: approvedById }
+          }
+        });
+
+        return { success: true, loan };
+      });
     },
   });
 
@@ -555,15 +619,27 @@ export default async function loanRoutes(fastify, opts) {
       const { id } = request.params;
       const { rejectionReason } = request.body;
 
-      const loan = await fastify.prisma.loan.update({
-        where: { id },
-        data: {
-          status: "REJECTED",
-          rejectionReason,
-        },
-      });
+      return await fastify.prisma.$transaction(async (tx) => {
+        const loan = await tx.loan.update({
+          where: { id },
+          data: {
+            status: "REJECTED",
+            rejectionReason,
+          },
+        });
 
-      return { success: true, loan };
+        await tx.auditLog.create({
+          data: {
+            action: "LOAN_REJECT",
+            entity: "LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { loanNo: loan.loanNo, reason: rejectionReason }
+          }
+        });
+
+        return { success: true, loan };
+      });
     },
   });
 
@@ -585,16 +661,28 @@ export default async function loanRoutes(fastify, opts) {
       const { id } = request.params;
       const { status, approvedById, rejectionReason } = request.body;
 
-      const loan = await fastify.prisma.loan.update({
-        where: { id },
-        data: {
-          status,
-          approvedById: approvedById || undefined,
-          rejectionReason: rejectionReason || undefined,
-        },
-      });
+      return await fastify.prisma.$transaction(async (tx) => {
+        const loan = await tx.loan.update({
+          where: { id },
+          data: {
+            status,
+            approvedById: approvedById || undefined,
+            rejectionReason: rejectionReason || undefined,
+          },
+        });
 
-      return { success: true, loan };
+        await tx.auditLog.create({
+          data: {
+            action: "LOAN_STATUS_UPDATE",
+            entity: "LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { status, loanNo: loan.loanNo }
+          }
+        });
+
+        return { success: true, loan };
+      });
     },
   });
 }

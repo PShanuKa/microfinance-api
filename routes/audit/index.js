@@ -13,18 +13,20 @@ export default async function auditRoutes(fastify, opts) {
           page: { type: "number", default: 1 },
           limit: { type: "number", default: 20 },
           entity: { type: "string" },
+          entityId: { type: "string" },
           action: { type: "string" },
           userId: { type: "string" },
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, entity, action, userId } = request.query;
+      const { page, limit, entity, entityId, action, userId } = request.query;
       const skip = (page - 1) * limit;
 
       const where = {
         AND: [
           entity ? { entity } : {},
+          entityId ? { entityId } : {},
           action ? { action } : {},
           userId ? { userId } : {},
         ],
