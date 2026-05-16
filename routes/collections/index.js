@@ -131,6 +131,30 @@ export default async function collectionRoutes(fastify, opts) {
     return { success: true, collections };
   });
 
+  // Get Single Collection Details
+  fastify.get("/:id", async (request, reply) => {
+    const { id } = request.params;
+    
+    const collection = await fastify.prisma.collection.findUnique({
+      where: { id },
+      include: {
+        group: true,
+        loan: true,
+        items: {
+          include: {
+            instalment: {
+              include: { client: { select: { fullname: true, clientNo: true } } }
+            }
+          }
+        }
+      }
+    });
+
+    if (!collection) throw createNotFoundError("Collection not found");
+
+    return { success: true, collection };
+  });
+
   // Get Daily Collection Registry (Expected instalments for a specific day)
   fastify.get("/daily-registry", {
     schema: {
