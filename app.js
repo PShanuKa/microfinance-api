@@ -10,6 +10,7 @@ import fs from "fs";
 import prismaPlugin from "./plugins/prisma.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import requestLoggerPlugin from "./plugins/requestLogger.js";
+import jwtPlugin from "./plugins/jwt.js";
 import {
   globalErrorHandler,
   notFoundHandler,
@@ -63,6 +64,7 @@ export async function buildApp(opts = {}) {
     dotenv: true,
   });
 
+  await fastify.register(jwtPlugin);
   await fastify.register(requestLoggerPlugin);
   await fastify.register(corsPlugin);
   await fastify.register(swaggerPlugin);

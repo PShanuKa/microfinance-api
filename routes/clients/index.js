@@ -2,6 +2,7 @@
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 
 export default async function clientRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
   // Get all clients with pagination
   fastify.get("/", {
     schema: {
@@ -20,6 +21,7 @@ export default async function clientRoutes(fastify, opts) {
       const skip = (page - 1) * limit;
 
       const where = {
+        isDeleted: false,
         AND: [
           search ? {
             OR: [
@@ -138,6 +140,7 @@ export default async function clientRoutes(fastify, opts) {
           address,
           job,
           status: status || "ACTIVE",
+          createdBy: request.user.id,
           ...(profileImageId ? { profileImage: { connect: { id: profileImageId } } } : {}),
           ...(documents && documents.length > 0 ? {
             documents: {
@@ -209,7 +212,7 @@ export default async function clientRoutes(fastify, opts) {
       const data = request.body;
 
       const client = await fastify.prisma.client.findUnique({ where: { id } });
-      if (!client) throw createNotFoundError("Client not found");
+      if (!client || client.isDeleted) throw createNotFoundError("Client not found");
 
       // Check if NIC is being updated and if it already exists
       if (data.nic && data.nic !== client.nic) {
@@ -227,6 +230,7 @@ export default async function clientRoutes(fastify, opts) {
         where: { id },
         data: {
           ...rest,
+          updatedBy: request.user.id,
           ...(profileImageId ? { profileImage: { connect: { id: profileImageId } } } : {}),
           ...(documents ? {
             documents: {
@@ -279,7 +283,7 @@ export default async function clientRoutes(fastify, opts) {
         }
       }
     });
-    if (!client) throw createNotFoundError("Client not found");
+    if (!client || client.isDeleted) throw createNotFoundError("Client not found");
     return { success: true, client };
   });
 
@@ -319,8 +323,12 @@ export default async function clientRoutes(fastify, opts) {
         throw createBadRequestError("Cannot delete client because they are acting as a guarantor for one or more loans.");
       }
 
-      await fastify.prisma.client.delete({
+      await fastify.prisma.client.update({
         where: { id },
+        data: { 
+          isDeleted: true,
+          updatedBy: request.user.id
+        }
       });
 
       return { success: true, message: "Client deleted successfully" };

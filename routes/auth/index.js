@@ -177,4 +177,31 @@ export default async function authRoutes(fastify, opts) {
       ...tokens,
     };
   });
+
+  // Get Current User (Me)
+  fastify.get("/me", {
+    preHandler: [fastify.authenticate]
+  }, async (request, reply) => {
+    const user = await fastify.prisma.user.findUnique({
+      where: { id: request.user.id },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        role: true,
+        status: true,
+        branch: true,
+        createdAt: true
+      }
+    });
+
+    if (!user) {
+      throw createUnauthorizedError("User not found");
+    }
+
+    return {
+      success: true,
+      user
+    };
+  });
 }

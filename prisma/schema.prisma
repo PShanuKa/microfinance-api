@@ -59,6 +59,10 @@ model Client {
   profileImageId String?
   profileImage   Attachment? @relation("ProfileImage", fields: [profileImageId], references: [id])
 
+  createdBy      String?
+  updatedBy      String?
+  isDeleted      Boolean  @default(false)
+
   documents      ClientDocument[]
 
   @@map("clients")
