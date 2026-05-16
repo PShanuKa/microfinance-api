@@ -10,7 +10,14 @@ async function jwtPlugin(fastify, options) {
     try {
       await request.jwtVerify();
     } catch (err) {
-      throw new Error('Unauthorized');
+      if (err.code === 'FST_JWT_AUTHORIZATION_TOKEN_EXPIRED') {
+        const error = new Error('TOKEN_EXPIRED');
+        error.statusCode = 401;
+        throw error;
+      }
+      const error = new Error('Unauthorized');
+      error.statusCode = 401;
+      throw error;
     }
   });
 }
