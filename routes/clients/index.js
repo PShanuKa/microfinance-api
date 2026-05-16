@@ -8,31 +8,36 @@ export default async function clientRoutes(fastify, opts) {
     schema: {
       query: {
         type: "object",
-        properties: {
-          page: { type: "number", default: 1 },
-          limit: { type: "number", default: 10 },
-          search: { type: "string" },
-          status: { type: "string" },
+          properties: {
+            page: { type: "number", default: 1 },
+            limit: { type: "number", default: 10 },
+            search: { type: "string" },
+            status: { type: "string" },
+            startDate: { type: "string" },
+            endDate: { type: "string" },
+          },
         },
       },
-    },
-    handler: async (request, reply) => {
-      const { page, limit, search, status } = request.query;
-      const skip = (page - 1) * limit;
-
-      const where = {
-        isDeleted: false,
-        AND: [
-          search ? {
-            OR: [
-              { fullname: { contains: search } },
-              { nic: { contains: search } },
-              { clientNo: { contains: search } },
-            ],
-          } : {},
-          status && status !== "All" ? { status } : {},
-        ],
-      };
+      handler: async (request, reply) => {
+        const { page, limit, search, status, startDate, endDate } = request.query;
+        const skip = (page - 1) * limit;
+  
+        const where = {
+          isDeleted: false,
+          AND: [
+            search ? {
+              OR: [
+                { fullname: { contains: search } },
+                { nic: { contains: search } },
+                { clientNo: { contains: search } },
+                { phone: { contains: search } },
+              ],
+            } : {},
+            status && status !== "All" ? { status } : {},
+            startDate ? { createdAt: { gte: new Date(startDate) } } : {},
+            endDate ? { createdAt: { lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)) } } : {},
+          ],
+        };
 
       const [clients, total] = await Promise.all([
         fastify.prisma.client.findMany({
