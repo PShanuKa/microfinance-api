@@ -117,7 +117,7 @@ export default async function clientRoutes(fastify, opts) {
       });
 
       if (existingClient) {
-        throw createBadRequestError("Client with this NIC already exists");
+        throw createBadRequestError("Validation error", { nic: "Client with this NIC already exists" });
       }
 
       // Generate client number (C-001, C-002, etc.)
@@ -234,7 +234,7 @@ export default async function clientRoutes(fastify, opts) {
           where: { nic: data.nic },
         });
         if (existingNic) {
-          throw createBadRequestError("NIC already in use by another client");
+          throw createBadRequestError("Validation error", { nic: "NIC already in use by another client" });
         }
       }
 

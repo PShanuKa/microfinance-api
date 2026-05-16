@@ -28,6 +28,7 @@ export const globalErrorHandler = (fastify) => {
       return reply.code(error.statusCode || 400).send({
         success: false,
         error: error.message,
+        fields: error.fields, // Field-level errors for frontend
         statusCode: error.statusCode || 400,
       });
     }
