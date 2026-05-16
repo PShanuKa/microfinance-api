@@ -159,6 +159,20 @@ export default async function clientRoutes(fastify, opts) {
         }
       });
 
+      // Audit Log
+      await fastify.prisma.auditLog.create({
+        data: {
+          action: "CREATE",
+          entity: "CLIENT",
+          entityId: client.id,
+          userId: request.user.id,
+          details: {
+            message: `Created client ${client.fullname} (${client.clientNo})`,
+            after: client
+          }
+        }
+      });
+
       return { success: true, client };
     },
   });
@@ -250,6 +264,21 @@ export default async function clientRoutes(fastify, opts) {
         }
       });
 
+      // Audit Log
+      await fastify.prisma.auditLog.create({
+        data: {
+          action: "UPDATE",
+          entity: "CLIENT",
+          entityId: updatedClient.id,
+          userId: request.user.id,
+          details: {
+            message: `Updated client ${updatedClient.fullname} (${updatedClient.clientNo})`,
+            before: client,
+            after: updatedClient
+          }
+        }
+      });
+
       return { success: true, client: updatedClient };
     },
   });
@@ -328,6 +357,20 @@ export default async function clientRoutes(fastify, opts) {
         data: { 
           isDeleted: true,
           updatedBy: request.user.id
+        }
+      });
+
+      // Audit Log
+      await fastify.prisma.auditLog.create({
+        data: {
+          action: "DELETE",
+          entity: "CLIENT",
+          entityId: client.id,
+          userId: request.user.id,
+          details: {
+            message: `Deleted client ${client.fullname} (${client.clientNo})`,
+            before: client
+          }
         }
       });
 

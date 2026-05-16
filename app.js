@@ -25,6 +25,7 @@ import collectionRoutes from "./routes/collections/index.js";
 import settingsRoutes from "./routes/settings/index.js";
 import nonCollectionWeekRoutes from "./routes/non-collection-weeks/index.js";
 import attachmentRoutes from "./routes/attachments/index.js";
+import auditRoutes from "./routes/audit/index.js";
 import fastifyMultipart from "@fastify/multipart";
 
 
@@ -84,6 +85,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(settingsRoutes, { prefix: "/api/settings" });
   await fastify.register(nonCollectionWeekRoutes, { prefix: "/api/non-collection-weeks" });
   await fastify.register(attachmentRoutes, { prefix: "/api/attachments" });
+  await fastify.register(auditRoutes, { prefix: "/api/audit" });
 
   fastify.get("/api/health", async (request, reply) => {
     const systemInfo = getSystemInfo();
