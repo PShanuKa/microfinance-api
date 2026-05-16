@@ -11,19 +11,43 @@ export default async function groupRoutes(fastify, opts) {
           page: { type: "number", default: 1 },
           limit: { type: "number", default: 10 },
           search: { type: "string" },
+          status: { type: "string" }, // "All", "Active", "Inactive"
+          collectionDay: { type: "string" }, // "All", "1", "2"...
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, search } = request.query;
+      const { page, limit, search, status, collectionDay } = request.query;
       const skip = (page - 1) * limit;
 
-      const where = search ? {
-        OR: [
-          { name: { contains: search } },
-          { branch: { contains: search } },
-        ],
-      } : {};
+      const where = {
+        AND: [
+          search ? {
+            OR: [
+              { name: { contains: search } },
+              { groupNo: { contains: search } },
+              { branch: { contains: search } },
+              {
+                officer: {
+                  fullname: { contains: search }
+                }
+              },
+              {
+                members: {
+                  some: {
+                    isLeader: true,
+                    client: {
+                      fullname: { contains: search }
+                    }
+                  }
+                }
+              }
+            ],
+          } : {},
+          status && status !== "All" ? { status: status === "Active" } : {},
+          collectionDay && collectionDay !== "All" ? { collectionDay: parseInt(collectionDay) } : {},
+        ]
+      };
 
       const [groups, total] = await Promise.all([
         fastify.prisma.group.findMany({
@@ -33,6 +57,7 @@ export default async function groupRoutes(fastify, opts) {
           include: {
             officer: { select: { id: true, fullname: true } },
             members: {
+              where: { isLeader: true },
               include: {
                 client: { select: { fullname: true, clientNo: true, phone: true } }
               }
@@ -83,8 +108,23 @@ export default async function groupRoutes(fastify, opts) {
     },
     handler: async (request, reply) => {
       const data = request.body;
+
+      // Auto-generate Group ID (G-001, G-002, etc.)
+      const lastGroup = await fastify.prisma.group.findFirst({
+        orderBy: { createdAt: "desc" },
+      });
+
+      let nextNo = 1;
+      if (lastGroup && lastGroup.groupNo && lastGroup.groupNo.startsWith("G-")) {
+        nextNo = parseInt(lastGroup.groupNo.split("-")[1]) + 1;
+      }
+      const groupNo = `G-${nextNo.toString().padStart(3, "0")}`;
+
       const group = await fastify.prisma.group.create({
-        data,
+        data: {
+          ...data,
+          groupNo,
+        },
       });
       return { success: true, group };
     },
