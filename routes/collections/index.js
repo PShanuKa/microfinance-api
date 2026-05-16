@@ -180,11 +180,12 @@ export default async function collectionRoutes(fastify, opts) {
         type: "object",
         properties: {
           date: { type: "string", format: "date" },
+          loanId: { type: "string" },
         }
       }
     },
     handler: async (request, reply) => {
-      const { date } = request.query;
+      const { date, loanId } = request.query;
       // const targetDate = date ? new Date(date) : new Date();
       const targetDate = "2026-06-07";
       
@@ -200,12 +201,13 @@ export default async function collectionRoutes(fastify, opts) {
             gte: start,
             lte: end
           },
+          loanId: loanId || undefined,
           loan: {
             status: { in: ["DRAFT", "PENDING", "APPROVED", "ACTIVE"] }
-            // status: "APPROVED" // Only active/approved loans
           }
         },
         include: {
+          client: { select: { fullname: true, clientNo: true } },
           loan: {
             include: {
               group: {
@@ -222,15 +224,17 @@ export default async function collectionRoutes(fastify, opts) {
         }
       });
 
-
-
-      // 2. Group by Group ID
+      // 2. Group by Loan ID (Each row in registry is a Loan)
       const grouped = instalments.reduce((acc, inst) => {
-        const group = inst.loan.group;
-        if (!acc[group.id]) {
+        const currentLoanId = inst.loanId;
+        if (!acc[currentLoanId]) {
+          const group = inst.loan.group;
           const leader = group.members.find(m => m.isLeader)?.client;
-          acc[group.id] = {
-            id: group.id,
+          acc[currentLoanId] = {
+            id: currentLoanId,
+            groupId: group.id,
+            loanId: currentLoanId,
+            loanNo: inst.loan.loanNo,
             groupNo: group.groupNo || "N/A",
             groupName: group.name,
             location: group.branch,
@@ -240,14 +244,14 @@ export default async function collectionRoutes(fastify, opts) {
             members: group.members.length,
             instalmentNo: inst.weekNumber,
             expected: 0,
-            arrears: 0, // Will fetch separately if needed, or simplified here
+            arrears: 0,
             collected: 0,
             status: "Pending"
           };
         }
         
-        acc[group.id].expected += Number(inst.dueAmount);
-        acc[group.id].collected += Number(inst.paidAmount);
+        acc[currentLoanId].expected += Number(inst.dueAmount);
+        acc[currentLoanId].collected += Number(inst.paidAmount);
         
         return acc;
       }, {});
@@ -260,7 +264,20 @@ export default async function collectionRoutes(fastify, opts) {
         return g;
       });
 
-      return { success: true, date: start.toISOString(), registry };
+      return { 
+        success: true, 
+        date: start.toISOString(), 
+        registry,
+        instalments: loanId ? instalments.map(i => ({
+          id: i.id,
+          weekNumber: i.weekNumber,
+          dueAmount: Number(i.dueAmount),
+          paidAmount: Number(i.paidAmount),
+          status: i.status,
+          memberName: i.client.fullname,
+          clientNo: i.client.clientNo
+        })) : []
+      };
     }
   });
 }
