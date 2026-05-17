@@ -15,11 +15,12 @@ export default async function loanRoutes(fastify, opts) {
           limit: { type: "number", default: 10 },
           search: { type: "string" },
           status: { type: "string" },
+          collectionDay: { type: "number" },
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, search, status } = request.query;
+      const { page, limit, search, status, collectionDay } = request.query;
       const skip = (page - 1) * limit;
 
       const where = {
@@ -31,6 +32,7 @@ export default async function loanRoutes(fastify, opts) {
             ]
           } : {},
           status && status !== "All" ? { status } : {},
+          collectionDay ? { group: { collectionDay } } : {},
         ],
       };
 
