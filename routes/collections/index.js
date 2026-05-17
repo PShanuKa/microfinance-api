@@ -484,8 +484,7 @@ export default async function collectionRoutes(fastify, opts) {
     },
     handler: async (request, reply) => {
       const { date, loanId } = request.query;
-      // const targetDate = date ? new Date(date) : new Date();
-      const targetDate = "2026-06-14";
+      const targetDate = date || "2026-06-14";
       
       const start = new Date(targetDate);
       start.setHours(0, 0, 0, 0);
@@ -525,6 +524,73 @@ export default async function collectionRoutes(fastify, opts) {
         }
       });
 
+      // Calculate past unpaid/partial instalment arrears for each loan and client
+      const loanIds = [...new Set(instalments.map(i => i.loanId))];
+      const pastInstalments = loanIds.length > 0 ? await fastify.prisma.instalment.findMany({
+        where: {
+          loanId: { in: loanIds },
+          dueDate: { lt: start },
+          status: { in: ["UNPAID", "PARTIAL"] }
+        }
+      }) : [];
+
+      const pastDueByLoan = pastInstalments.reduce((acc, inst) => {
+        const remaining = Number(inst.dueAmount) - Number(inst.paidAmount);
+        if (remaining > 0) {
+          acc[inst.loanId] = (acc[inst.loanId] || 0) + remaining;
+        }
+        return acc;
+      }, {});
+
+      const arrearsByClientAndLoan = pastInstalments.reduce((acc, inst) => {
+        const key = `${inst.loanId}_${inst.clientId}`;
+        const remaining = Number(inst.dueAmount) - Number(inst.paidAmount);
+        if (remaining > 0) {
+          acc[key] = (acc[key] || 0) + remaining;
+        }
+        return acc;
+      }, {});
+
+      // Calculate today's collections for each loan (including arrears collections)
+      const collectionsToday = loanIds.length > 0 ? await fastify.prisma.collection.findMany({
+        where: {
+          loanId: { in: loanIds },
+          date: {
+            gte: start,
+            lte: end
+          },
+          status: { in: ["SUBMITTED", "APPROVED"] }
+        }
+      }) : [];
+
+      const collectedByLoan = collectionsToday.reduce((acc, col) => {
+        acc[col.loanId] = (acc[col.loanId] || 0) + Number(col.amountCollected);
+        return acc;
+      }, {});
+
+      // Calculate today's collections for each member (by loan and client, including arrears payments)
+      const collectionItemsToday = loanIds.length > 0 ? await fastify.prisma.collectionItem.findMany({
+        where: {
+          collection: {
+            loanId: { in: loanIds },
+            date: {
+              gte: start,
+              lte: end
+            },
+            status: { in: ["SUBMITTED", "APPROVED"] }
+          }
+        },
+        include: {
+          instalment: { select: { clientId: true, loanId: true } }
+        }
+      }) : [];
+
+      const memberCollectedToday = collectionItemsToday.reduce((acc, item) => {
+        const key = `${item.instalment.loanId}_${item.instalment.clientId}`;
+        acc[key] = (acc[key] || 0) + Number(item.amount);
+        return acc;
+      }, {});
+
       // 2. Group by Loan ID (Each row in registry is a Loan)
       const grouped = instalments.reduce((acc, inst) => {
         const currentLoanId = inst.loanId;
@@ -545,6 +611,7 @@ export default async function collectionRoutes(fastify, opts) {
             members: group.members.length,
             instalmentNo: inst.weekNumber,
             expected: 0,
+            arrears: pastDueByLoan[currentLoanId] || 0,
             collected: 0,
             hasPending: false,
             allPaid: true,
@@ -559,7 +626,13 @@ export default async function collectionRoutes(fastify, opts) {
         if (pendingTotal > 0) acc[currentLoanId].hasPending = true;
 
         const effectivePaid = inst.status === "UNPAID" ? pendingTotal : Number(inst.paidAmount);
-        acc[currentLoanId].collected += effectivePaid;
+        
+        // Track the base instalment paid amount for today
+        acc[currentLoanId].collectedTodayInstalmentBase = (acc[currentLoanId].collectedTodayInstalmentBase || 0) + effectivePaid;
+        
+        // Set collected to be the maximum of the collections query (which includes arrears paid today) and the today's instalment base payments.
+        const queryCollected = collectedByLoan[currentLoanId] || 0;
+        acc[currentLoanId].collected = Math.max(queryCollected, acc[currentLoanId].collectedTodayInstalmentBase);
 
         // Track statuses for final classification
         if (inst.status !== "PAID") acc[currentLoanId].allPaid = false;
@@ -584,6 +657,7 @@ export default async function collectionRoutes(fastify, opts) {
         delete g.hasPending;
         delete g.allPaid;
         delete g.allUnpaid;
+        delete g.collectedTodayInstalmentBase;
         
         return g;
       });
@@ -594,7 +668,7 @@ export default async function collectionRoutes(fastify, opts) {
         registry,
         instalments: loanId ? instalments.map(i => {
           const pendingTotal = i.collectionItems.reduce((sum, item) => sum + Number(item.amount), 0);
-          const effectivePaid = i.status === "UNPAID" ? pendingTotal : Number(i.paidAmount);
+          const instEffectivePaid = i.status === "UNPAID" ? pendingTotal : Number(i.paidAmount);
           
           // If there's a submitted collection for an unpaid instalment, mark status as Pending
           let effectiveStatus = i.status;
@@ -602,10 +676,25 @@ export default async function collectionRoutes(fastify, opts) {
             effectiveStatus = "Pending";
           }
 
+          const clientArrears = arrearsByClientAndLoan[`${i.loanId}_${i.clientId}`] || 0;
+
+          // Get total collected today for this member (including arrears payments)
+          const memberKey = `${i.loanId}_${i.clientId}`;
+          const totalMemberPaidToday = memberCollectedToday[memberKey] || 0;
+          const effectivePaid = Math.max(totalMemberPaidToday, instEffectivePaid);
+
+          // If the member paid the full due amount (current + arrears), they are paid!
+          const memberTotalDue = Number(i.dueAmount) + clientArrears;
+          if (effectivePaid >= memberTotalDue && memberTotalDue > 0) {
+            effectiveStatus = "PAID";
+          }
+
           return {
             id: i.id,
             weekNumber: i.weekNumber,
-            dueAmount: Number(i.dueAmount),
+            dueAmount: memberTotalDue,
+            currentDue: Number(i.dueAmount),
+            arrears: clientArrears,
             paidAmount: effectivePaid,
             status: effectiveStatus,
             memberName: i.client.fullname,
