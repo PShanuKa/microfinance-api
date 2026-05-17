@@ -200,27 +200,16 @@ export default async function loanRoutes(fastify, opts) {
           }
         }
 
-        // Generate Instalments
-        const instalments = [];
-        const targetDay = group.collectionDay === 7 ? 0 : group.collectionDay;
-        let firstDueDate = nextDay(new Date(), targetDay);
-        firstDueDate = startOfDay(firstDueDate);
-
-        for (let week = 1; week <= data.totalWeeks; week++) {
-          const dueDate = addDays(firstDueDate, (week - 1) * 7);
-          for (const member of group.members) {
-            const dueAmount = member.isLeader ? data.leaderWeeklyAmount : data.memberWeeklyAmount;
-            instalments.push({
-              loanId: loan.id,
-              clientId: member.clientId,
-              weekNumber: week,
-              dueDate,
-              dueAmount,
-              remainingDue: dueAmount,
-              status: "UNPAID",
-            });
-          }
-        }
+        // Generate Instalments (with non-collection weeks skipped)
+        const instalments = await generateInstalments(
+          tx,
+          loan,
+          group,
+          data.totalWeeks,
+          data.leaderWeeklyAmount,
+          data.memberWeeklyAmount,
+          new Date()
+        );
 
         await tx.instalment.createMany({ data: instalments });
 
@@ -240,27 +229,49 @@ export default async function loanRoutes(fastify, opts) {
     },
   });
 
-  // Helper function to generate instalments
-  const generateInstalments = async (tx, loan, group, totalWeeks, leaderWeeklyAmount, memberWeeklyAmount) => {
+  // Helper function to generate instalments skipping non-collection weeks
+  const generateInstalments = async (tx, loan, group, totalWeeks, leaderWeeklyAmount, memberWeeklyAmount, baseDate = new Date(loan.createdAt)) => {
+    // 1. Fetch upcoming non-collection weeks
+    const nonCollectionWeeks = await tx.nonCollectionWeek.findMany({
+      where: { endDate: { gte: baseDate } }
+    });
+
     const instalments = [];
     const targetDay = group.collectionDay === 7 ? 0 : group.collectionDay;
-    let firstDueDate = nextDay(new Date(loan.createdAt), targetDay);
-    firstDueDate = startOfDay(firstDueDate);
+    let currentDueDate = nextDay(baseDate, targetDay);
+    currentDueDate = startOfDay(currentDueDate);
 
     for (let week = 1; week <= totalWeeks; week++) {
-      const dueDate = addDays(firstDueDate, (week - 1) * 7);
+      // 2. Check if currentDueDate falls in any non-collection week and skip
+      let isSkipped = true;
+      while (isSkipped) {
+        isSkipped = nonCollectionWeeks.some(ncw => {
+          const start = new Date(ncw.startDate).getTime();
+          const end = new Date(ncw.endDate).getTime();
+          const curr = currentDueDate.getTime();
+          return curr >= start && curr <= end;
+        });
+
+        if (isSkipped) {
+          currentDueDate = addDays(currentDueDate, 7);
+        }
+      }
+
       for (const member of group.members) {
         const dueAmount = member.isLeader ? leaderWeeklyAmount : memberWeeklyAmount;
         instalments.push({
           loanId: loan.id,
           clientId: member.clientId,
           weekNumber: week,
-          dueDate,
+          dueDate: new Date(currentDueDate), // clone date
           dueAmount,
           remainingDue: dueAmount,
           status: "UNPAID",
         });
       }
+      
+      // 3. Move to next week for the next iteration
+      currentDueDate = addDays(currentDueDate, 7);
     }
     return instalments;
   };

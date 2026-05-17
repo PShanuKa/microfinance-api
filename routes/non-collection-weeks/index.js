@@ -26,12 +26,60 @@ export default async function nonCollectionWeekRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const { startDate, endDate, reason } = request.body;
       
-      const week = await fastify.prisma.nonCollectionWeek.create({
-        data: {
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
-          reason,
-        },
+      const startObj = new Date(startDate);
+      startObj.setHours(0, 0, 0, 0);
+      
+      const endObj = new Date(endDate);
+      endObj.setHours(23, 59, 59, 999);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // 1. Only allow future dates
+      if (startObj <= today) {
+        throw createBadRequestError("Non-collection weeks can only be created for future dates.");
+      }
+
+      const week = await fastify.prisma.$transaction(async (tx) => {
+        // 2. Check for PARTIAL or PAID installments in this period
+        const partialOrPaid = await tx.instalment.findFirst({
+          where: {
+            dueDate: { gte: startObj, lte: endObj },
+            status: { in: ["PARTIAL", "PAID"] }
+          }
+        });
+        
+        if (partialOrPaid) {
+          throw createBadRequestError("Cannot create non-collection week: Partial or paid installments exist in this period.");
+        }
+
+        // 3. Create the non-collection week
+        const newWeek = await tx.nonCollectionWeek.create({
+          data: {
+            startDate: startObj,
+            endDate: endObj,
+            reason,
+          },
+        });
+
+        // 4. Shift all upcoming UNPAID installments forward by 7 days
+        await tx.$executeRaw`
+          UPDATE instalments 
+          SET dueDate = DATE_ADD(dueDate, INTERVAL 7 DAY) 
+          WHERE dueDate >= ${startObj} AND status = 'UNPAID'
+        `;
+
+        await tx.auditLog.create({
+          data: {
+            action: "CREATE",
+            entity: "SETTINGS",
+            entityId: newWeek.id,
+            userId: request.user?.id || "SYSTEM",
+            details: { message: "Created Non-Collection Week", startDate: startObj, endDate: endObj, reason }
+          }
+        });
+
+        return newWeek;
       });
 
       return { success: true, week };
@@ -55,14 +103,85 @@ export default async function nonCollectionWeekRoutes(fastify, opts) {
       const { id } = request.params;
       const data = request.body;
 
-      const updateData = {};
-      if (data.startDate) updateData.startDate = new Date(data.startDate);
-      if (data.endDate) updateData.endDate = new Date(data.endDate);
-      if (data.reason !== undefined) updateData.reason = data.reason;
+      const week = await fastify.prisma.$transaction(async (tx) => {
+        const existingWeek = await tx.nonCollectionWeek.findUnique({ where: { id } });
+        if (!existingWeek) throw createNotFoundError();
 
-      const week = await fastify.prisma.nonCollectionWeek.update({
-        where: { id },
-        data: updateData,
+        const oldStart = existingWeek.startDate;
+        const oldEnd = existingWeek.endDate;
+
+        let newStart = oldStart;
+        let newEnd = oldEnd;
+
+        if (data.startDate) {
+          newStart = new Date(data.startDate);
+          newStart.setHours(0, 0, 0, 0);
+        }
+        if (data.endDate) {
+          newEnd = new Date(data.endDate);
+          newEnd.setHours(23, 59, 59, 999);
+        }
+
+        const datesChanged = newStart.getTime() !== oldStart.getTime() || newEnd.getTime() !== oldEnd.getTime();
+
+        if (datesChanged) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (newStart <= today) {
+            throw createBadRequestError("Non-collection weeks can only be set to future dates.");
+          }
+
+          const partialOrPaid = await tx.instalment.findFirst({
+            where: {
+              dueDate: { gte: newStart, lte: newEnd },
+              status: { in: ["PARTIAL", "PAID"] }
+            }
+          });
+          
+          if (partialOrPaid) {
+            throw createBadRequestError("Cannot update: Partial or paid installments exist in the new period.");
+          }
+
+          // Revert old shift (+7 days from old start => everything >= oldStart + 7 needs -7 days)
+          const oldShiftBoundary = new Date(oldStart);
+          oldShiftBoundary.setDate(oldShiftBoundary.getDate() + 7);
+          
+          await tx.$executeRaw`
+            UPDATE instalments 
+            SET dueDate = DATE_SUB(dueDate, INTERVAL 7 DAY) 
+            WHERE dueDate >= ${oldShiftBoundary} AND status = 'UNPAID'
+          `;
+
+          // Apply new shift
+          await tx.$executeRaw`
+            UPDATE instalments 
+            SET dueDate = DATE_ADD(dueDate, INTERVAL 7 DAY) 
+            WHERE dueDate >= ${newStart} AND status = 'UNPAID'
+          `;
+        }
+
+        const updateData = {};
+        if (data.startDate) updateData.startDate = newStart;
+        if (data.endDate) updateData.endDate = newEnd;
+        if (data.reason !== undefined) updateData.reason = data.reason;
+
+        const updatedWeek = await tx.nonCollectionWeek.update({
+          where: { id },
+          data: updateData,
+        });
+
+        await tx.auditLog.create({
+          data: {
+            action: "UPDATE",
+            entity: "SETTINGS",
+            entityId: id,
+            userId: request.user?.id || "SYSTEM",
+            details: { message: "Updated Non-Collection Week", changes: updateData }
+          }
+        });
+
+        return updatedWeek;
       });
 
       return { success: true, week };
@@ -72,7 +191,34 @@ export default async function nonCollectionWeekRoutes(fastify, opts) {
   // Delete
   fastify.delete("/:id", async (request, reply) => {
     const { id } = request.params;
-    await fastify.prisma.nonCollectionWeek.delete({ where: { id } });
+    
+    await fastify.prisma.$transaction(async (tx) => {
+      const existingWeek = await tx.nonCollectionWeek.findUnique({ where: { id } });
+      if (!existingWeek) throw createNotFoundError();
+
+      // If a non-collection week is deleted, revert its shift
+      const oldShiftBoundary = new Date(existingWeek.startDate);
+      oldShiftBoundary.setDate(oldShiftBoundary.getDate() + 7);
+      
+      await tx.$executeRaw`
+        UPDATE instalments 
+        SET dueDate = DATE_SUB(dueDate, INTERVAL 7 DAY) 
+        WHERE dueDate >= ${oldShiftBoundary} AND status = 'UNPAID'
+      `;
+
+      await tx.nonCollectionWeek.delete({ where: { id } });
+
+      await tx.auditLog.create({
+        data: {
+          action: "DELETE",
+          entity: "SETTINGS",
+          entityId: id,
+          userId: request.user?.id || "SYSTEM",
+          details: { message: "Deleted Non-Collection Week", startDate: existingWeek.startDate }
+        }
+      });
+    });
+
     return { success: true };
   });
 }
