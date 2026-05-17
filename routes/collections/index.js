@@ -58,6 +58,30 @@ export default async function collectionRoutes(fastify, opts) {
 
       // 2. Wrap in Transaction
       const result = await fastify.prisma.$transaction(async (tx) => {
+        // Find if there is already a SUBMITTED collection for the same loanId and date
+        const start = new Date(date);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(date);
+        end.setHours(23, 59, 59, 999);
+
+        const existingSubmittedCollection = await tx.collection.findFirst({
+          where: {
+            loanId,
+            date: {
+              gte: start,
+              lte: end
+            },
+            status: "SUBMITTED"
+          }
+        });
+
+        if (existingSubmittedCollection) {
+          // Delete existing submitted collection to perform an update/overwrite!
+          await tx.collection.delete({
+            where: { id: existingSubmittedCollection.id }
+          });
+        }
+
         const finalItems = [];
 
         for (const item of breakdownData) {
@@ -620,23 +644,22 @@ export default async function collectionRoutes(fastify, opts) {
           };
         }
         
-        acc[currentLoanId].expected += Number(inst.dueAmount);
+        // Expected is the remaining due for today's instalment
+        acc[currentLoanId].expected += Number(inst.remainingDue);
         
         const pendingTotal = inst.collectionItems.reduce((sum, item) => sum + Number(item.amount), 0);
         if (pendingTotal > 0) acc[currentLoanId].hasPending = true;
 
-        const effectivePaid = inst.status === "UNPAID" ? pendingTotal : Number(inst.paidAmount);
-        
-        // Track the base instalment paid amount for today
-        acc[currentLoanId].collectedTodayInstalmentBase = (acc[currentLoanId].collectedTodayInstalmentBase || 0) + effectivePaid;
-        
-        // Set collected to be the maximum of the collections query (which includes arrears paid today) and the today's instalment base payments.
-        const queryCollected = collectedByLoan[currentLoanId] || 0;
-        acc[currentLoanId].collected = Math.max(queryCollected, acc[currentLoanId].collectedTodayInstalmentBase);
+        // Set collected to be the total collections recorded today
+        acc[currentLoanId].collected = collectedByLoan[currentLoanId] || 0;
 
         // Track statuses for final classification
         if (inst.status !== "PAID") acc[currentLoanId].allPaid = false;
-        if (effectivePaid > 0 || inst.status !== "UNPAID") acc[currentLoanId].allUnpaid = false;
+        
+        const hasPaymentToday = (collectedByLoan[currentLoanId] || 0) > 0;
+        if (hasPaymentToday || inst.status !== "UNPAID") {
+          acc[currentLoanId].allUnpaid = false;
+        }
         
         return acc;
       }, {});
@@ -657,7 +680,6 @@ export default async function collectionRoutes(fastify, opts) {
         delete g.hasPending;
         delete g.allPaid;
         delete g.allUnpaid;
-        delete g.collectedTodayInstalmentBase;
         
         return g;
       });
@@ -667,33 +689,43 @@ export default async function collectionRoutes(fastify, opts) {
         date: start.toISOString(), 
         registry,
         instalments: loanId ? instalments.map(i => {
-          const pendingTotal = i.collectionItems.reduce((sum, item) => sum + Number(item.amount), 0);
-          const instEffectivePaid = i.status === "UNPAID" ? pendingTotal : Number(i.paidAmount);
-          
-          // If there's a submitted collection for an unpaid instalment, mark status as Pending
-          let effectiveStatus = i.status;
-          if (i.status === "UNPAID" && pendingTotal > 0) {
-            effectiveStatus = "Pending";
-          }
-
           const clientArrears = arrearsByClientAndLoan[`${i.loanId}_${i.clientId}`] || 0;
 
           // Get total collected today for this member (including arrears payments)
           const memberKey = `${i.loanId}_${i.clientId}`;
           const totalMemberPaidToday = memberCollectedToday[memberKey] || 0;
-          const effectivePaid = Math.max(totalMemberPaidToday, instEffectivePaid);
+          const effectivePaid = totalMemberPaidToday;
 
-          // If the member paid the full due amount (current + arrears), they are paid!
-          const memberTotalDue = Number(i.dueAmount) + clientArrears;
-          if (effectivePaid >= memberTotalDue && memberTotalDue > 0) {
-            effectiveStatus = "PAID";
+          // Map database statuses to human-friendly collection statuses
+          let effectiveStatus = "Non Collected";
+          if (i.status === "PAID") {
+            effectiveStatus = "Collected";
+          } else {
+            // Check if there is any collection recorded today
+            const hasPendingToday = collectionsToday.some(col => col.status === "SUBMITTED");
+            const hasApprovedToday = collectionsToday.some(col => col.status === "APPROVED");
+            
+            if (effectivePaid > 0 && hasPendingToday) {
+              effectiveStatus = "Pending";
+            } else if (effectivePaid > 0 && hasApprovedToday) {
+              const memberTotalDue = Number(i.remainingDue) + clientArrears;
+              if (memberTotalDue === 0) {
+                effectiveStatus = "Collected";
+              } else {
+                effectiveStatus = "PARTIAL Collected";
+              }
+            } else {
+              effectiveStatus = "Non Collected";
+            }
           }
+
+          const memberTotalDue = Number(i.remainingDue) + clientArrears;
 
           return {
             id: i.id,
             weekNumber: i.weekNumber,
             dueAmount: memberTotalDue,
-            currentDue: Number(i.dueAmount),
+            currentDue: Number(i.remainingDue),
             arrears: clientArrears,
             paidAmount: effectivePaid,
             status: effectiveStatus,
