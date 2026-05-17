@@ -47,6 +47,71 @@ export default async function collectionRoutes(fastify, opts) {
 
       // 2. Wrap in Transaction
       const result = await fastify.prisma.$transaction(async (tx) => {
+        const finalItems = [];
+
+        for (const item of breakdownData) {
+          if (Number(item.amount) <= 0) {
+            finalItems.push({
+              instalmentId: item.instalmentId,
+              amount: 0
+            });
+            continue;
+          }
+
+          const targetInstalment = await tx.instalment.findUnique({
+            where: { id: item.instalmentId },
+            select: { clientId: true, loanId: true }
+          });
+
+          if (!targetInstalment) {
+            throw createNotFoundError(`Instalment ${item.instalmentId} not found`);
+          }
+
+          // Fetch all instalments for this client and loan, ordered by weekNumber ASC
+          const allInstalments = await tx.instalment.findMany({
+            where: {
+              clientId: targetInstalment.clientId,
+              loanId: targetInstalment.loanId,
+            },
+            orderBy: { weekNumber: "asc" }
+          });
+
+          let remainingPayment = Number(item.amount);
+          const allocatedItems = [];
+
+          for (const inst of allInstalments) {
+            if (remainingPayment <= 0) break;
+
+            const due = Number(inst.dueAmount);
+            const paid = Number(inst.paidAmount);
+            const remaining = due - paid;
+
+            if (remaining > 0) {
+              const allocate = Math.min(remainingPayment, remaining);
+              allocatedItems.push({
+                instalmentId: inst.id,
+                amount: allocate
+              });
+              remainingPayment -= allocate;
+            }
+          }
+
+          // If there is still extra payment, allocate it to the last instalment
+          if (remainingPayment > 0 && allInstalments.length > 0) {
+            if (allocatedItems.length > 0) {
+              allocatedItems[allocatedItems.length - 1].amount += remainingPayment;
+            } else {
+              const lastInst = allInstalments[allInstalments.length - 1];
+              allocatedItems.push({
+                instalmentId: lastInst.id,
+                amount: remainingPayment
+              });
+            }
+          }
+
+          finalItems.push(...allocatedItems);
+        }
+
         // Create Collection Record with nested items
         const collection = await tx.collection.create({
           data: {
@@ -60,7 +125,7 @@ export default async function collectionRoutes(fastify, opts) {
             bankReference,
             breakdownNotes,
             items: {
-              create: breakdownData.map(item => ({
+              create: finalItems.map(item => ({
                 instalmentId: item.instalmentId,
                 amount: Number(item.amount)
               }))
@@ -158,55 +223,181 @@ export default async function collectionRoutes(fastify, opts) {
   // Approve Collection
   fastify.post("/:id/approve", async (request, reply) => {
     const { id } = request.params;
-    const { approverId } = request.body || { approverId: "ADMIN" };
+    const { approverId = "ADMIN", confirmOverpayment } = request.body || {};
+
+    // 1. Get collection and items to check for overpayments/conflicts
+    const collectionData = await fastify.prisma.collection.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            instalment: {
+              include: { client: { select: { fullname: true } } }
+            }
+          }
+        }
+      }
+    });
+
+    if (!collectionData) throw createNotFoundError("Collection not found");
+    if (collectionData.status !== "SUBMITTED") throw createBadRequestError("Collection is already processed");
+
+    const conflicts = [];
+    for (const item of collectionData.items) {
+      const inst = await fastify.prisma.instalment.findUnique({
+        where: { id: item.instalmentId }
+      });
+
+      if (inst) {
+        const remaining = Number(inst.dueAmount) - Number(inst.paidAmount);
+        if (inst.status === "PAID" || remaining < Number(item.amount)) {
+          conflicts.push({
+            memberName: item.instalment.client?.fullname || "Unknown",
+            weekNumber: inst.weekNumber,
+            status: inst.status,
+            itemAmount: Number(item.amount),
+            remainingDue: remaining
+          });
+        }
+      }
+    }
+
+    if (conflicts.length > 0 && !confirmOverpayment) {
+      return {
+        success: false,
+        code: "OVERPAYMENT_DETECTED",
+        message: "Some weeks are already paid. Extra money will be applied to the upcoming weeks.",
+        conflicts
+      };
+    }
 
     const result = await fastify.prisma.$transaction(async (tx) => {
-      // 1. Get collection and items
+      // Fetch collection inside transaction
       const collection = await tx.collection.findUnique({
         where: { id },
-        include: { items: true }
+        include: {
+          items: {
+            include: { instalment: true }
+          }
+        }
       });
 
       if (!collection) throw createNotFoundError("Collection not found");
       if (collection.status !== "SUBMITTED") throw createBadRequestError("Collection is already processed");
 
-      // 2. Update Collection status
+      // Group items by client to calculate their total payment in this collection
+      const clientPayments = {};
+      for (const item of collection.items) {
+        const clientId = item.instalment.clientId;
+        const loanId = item.instalment.loanId;
+        if (!clientPayments[clientId]) {
+          clientPayments[clientId] = {
+            clientId,
+            loanId,
+            totalAmount: 0,
+            itemIds: []
+          };
+        }
+        clientPayments[clientId].totalAmount += Number(item.amount);
+        clientPayments[clientId].itemIds.push(item.id);
+      }
+
+      // Re-allocate payments for each client to make sure it matches the CURRENT database state
+      for (const clientId of Object.keys(clientPayments)) {
+        const payment = clientPayments[clientId];
+
+        // Fetch all instalments for this client and loan, ordered by weekNumber ASC
+        const allInstalments = await tx.instalment.findMany({
+          where: {
+            clientId: payment.clientId,
+            loanId: payment.loanId,
+          },
+          orderBy: { weekNumber: "asc" }
+        });
+
+        let remainingPayment = payment.totalAmount;
+        const newAllocations = [];
+
+        for (const inst of allInstalments) {
+          if (remainingPayment <= 0) break;
+
+          const due = Number(inst.dueAmount);
+          const paid = Number(inst.paidAmount);
+          const remaining = due - paid;
+
+          if (remaining > 0) {
+            const allocate = Math.min(remainingPayment, remaining);
+            newAllocations.push({
+              instalmentId: inst.id,
+              amount: allocate
+            });
+            remainingPayment -= allocate;
+          }
+        }
+
+        // If there is still extra payment, allocate it to the last instalment
+        if (remainingPayment > 0 && allInstalments.length > 0) {
+          if (newAllocations.length > 0) {
+            newAllocations[newAllocations.length - 1].amount += remainingPayment;
+          } else {
+            const lastInst = allInstalments[allInstalments.length - 1];
+            newAllocations.push({
+              instalmentId: lastInst.id,
+              amount: remainingPayment
+            });
+          }
+        }
+
+        // Delete existing items for this client in this collection
+        await tx.collectionItem.deleteMany({
+          where: {
+            id: { in: payment.itemIds }
+          }
+        });
+
+        // Re-create the collection items with the new allocations
+        for (const alloc of newAllocations) {
+          await tx.collectionItem.create({
+            data: {
+              collectionId: id,
+              instalmentId: alloc.instalmentId,
+              amount: Number(alloc.amount),
+              status: "APPROVED"
+            }
+          });
+        }
+
+        // Update the instalments' paid amount, remaining due, and status
+        for (const alloc of newAllocations) {
+          const inst = await tx.instalment.findUnique({
+            where: { id: alloc.instalmentId }
+          });
+
+          if (inst) {
+            const currentPaid = Number(inst.paidAmount);
+            const newPaid = currentPaid + Number(alloc.amount);
+            const remaining = Number(inst.dueAmount) - newPaid;
+
+            await tx.instalment.update({
+              where: { id: inst.id },
+              data: {
+                paidAmount: newPaid,
+                remainingDue: remaining > 0 ? remaining : 0,
+                status: newPaid >= Number(inst.dueAmount) ? "PAID" : 
+                        newPaid > 0 ? "PARTIAL" : "UNPAID"
+              }
+            });
+          }
+        }
+      }
+
+      // Update Collection status
       await tx.collection.update({
         where: { id },
         data: { status: "APPROVED" }
       });
 
-      // 3. Update CollectionItems and Instalments
-      for (const item of collection.items) {
-        // Update item status
-        await tx.collectionItem.update({
-          where: { id: item.id },
-          data: { status: "APPROVED" }
-        });
-
-        // Update linked instalment
-        const inst = await tx.instalment.findUnique({
-          where: { id: item.instalmentId }
-        });
-
-        if (inst) {
-          const currentPaid = Number(inst.paidAmount);
-          const newPaid = currentPaid + Number(item.amount);
-          const remaining = Number(inst.dueAmount) - newPaid;
-
-          await tx.instalment.update({
-            where: { id: inst.id },
-            data: {
-              paidAmount: newPaid,
-              remainingDue: remaining > 0 ? remaining : 0,
-              status: newPaid >= Number(inst.dueAmount) ? "PAID" : 
-                      newPaid > 0 ? "PARTIAL" : "UNPAID"
-            }
-          });
-        }
-      }
-
-      // 4. Audit Log
+      // Audit Log
       await tx.auditLog.create({
         data: {
           action: "COLLECTION_APPROVED",
@@ -225,7 +416,7 @@ export default async function collectionRoutes(fastify, opts) {
   // Reject Collection
   fastify.post("/:id/reject", async (request, reply) => {
     const { id } = request.params;
-    const { rejecterId } = request.body || { rejecterId: "ADMIN" };
+    const { rejecterId = "ADMIN" } = request.body || {};
 
     const result = await fastify.prisma.$transaction(async (tx) => {
       const collection = await tx.collection.findUnique({ where: { id } });
