@@ -240,6 +240,7 @@ model Collection {
   bankReference    String?
   breakdownNotes   String?          @db.Text
   items            CollectionItem[]
+  attachments      CollectionAttachment[]
   status           CollectionStatus @default(SUBMITTED)
   
   createdAt        DateTime         @default(now())
@@ -315,6 +316,7 @@ model Attachment {
   profileClients Client[] @relation("ProfileImage")
   documents      ClientDocument[]
   guarantorDocs  GuarantorDocument[]
+  collectionDocs CollectionAttachment[]
 
   @@map("attachments")
 }
@@ -341,4 +343,16 @@ model GuarantorDocument {
   createdAt    DateTime   @default(now())
 
   @@map("guarantor_documents")
+}
+
+model CollectionAttachment {
+  id           String     @id @default(cuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  attachmentId String
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  note         String?    @db.Text
+  createdAt    DateTime   @default(now())
+
+  @@map("collection_attachments")
 }

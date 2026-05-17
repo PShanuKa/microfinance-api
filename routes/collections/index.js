@@ -17,6 +17,17 @@ export default async function collectionRoutes(fastify, opts) {
           collectorId: { type: "string" },
           bankReference: { type: "string" },
           breakdownNotes: { type: "string" },
+          attachments: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["attachmentId"],
+              properties: {
+                attachmentId: { type: "string" },
+                note: { type: "string" }
+              }
+            }
+          },
           breakdownData: { 
             type: "array",
             items: {
@@ -33,7 +44,7 @@ export default async function collectionRoutes(fastify, opts) {
       }
     },
     handler: async (request, reply) => {
-      const { groupId, loanId, date, weekNumber, instalmentNumber, collectorId, breakdownData, bankReference, breakdownNotes } = request.body;
+      const { groupId, loanId, date, weekNumber, instalmentNumber, collectorId, breakdownData, bankReference, breakdownNotes, attachments } = request.body;
 
       // 1. Validation
       const group = await fastify.prisma.group.findUnique({
@@ -129,7 +140,13 @@ export default async function collectionRoutes(fastify, opts) {
                 instalmentId: item.instalmentId,
                 amount: Number(item.amount)
               }))
-            }
+            },
+            attachments: attachments && attachments.length > 0 ? {
+              create: attachments.map(att => ({
+                attachmentId: att.attachmentId,
+                note: att.note || null
+              }))
+            } : undefined
           }
         });
 
@@ -205,6 +222,11 @@ export default async function collectionRoutes(fastify, opts) {
       include: {
         group: true,
         loan: true,
+        attachments: {
+          include: {
+            attachment: true
+          }
+        },
         items: {
           include: {
             instalment: {
@@ -369,9 +391,7 @@ export default async function collectionRoutes(fastify, opts) {
 
         // Update the instalments' paid amount, remaining due, and status
         for (const alloc of newAllocations) {
-          const inst = await tx.instalment.findUnique({
-            where: { id: alloc.instalmentId }
-          });
+          const inst = allInstalments.find(i => i.id === alloc.instalmentId);
 
           if (inst) {
             const currentPaid = Number(inst.paidAmount);
@@ -408,6 +428,9 @@ export default async function collectionRoutes(fastify, opts) {
       });
 
       return { success: true };
+    }, {
+      maxWait: 5000,
+      timeout: 30000
     });
 
     return result;
