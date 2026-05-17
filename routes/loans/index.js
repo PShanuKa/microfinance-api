@@ -593,6 +593,42 @@ export default async function loanRoutes(fastify, opts) {
       const { approvedById } = request.body;
 
       return await fastify.prisma.$transaction(async (tx) => {
+        // 1. Fetch loan and group details
+        const existingLoan = await tx.loan.findUnique({
+          where: { id },
+          include: {
+            group: {
+              include: {
+                members: true
+              }
+            }
+          }
+        });
+
+        if (!existingLoan) {
+          throw createNotFoundError(`Loan ${id} not found`);
+        }
+
+        // 2. Delete existing instalments
+        await tx.instalment.deleteMany({
+          where: { loanId: id }
+        });
+
+        // 3. Generate new instalments starting with baseDate = today
+        const instalments = await generateInstalments(
+          tx,
+          existingLoan,
+          existingLoan.group,
+          existingLoan.totalWeeks,
+          existingLoan.leaderWeeklyAmount,
+          existingLoan.memberWeeklyAmount,
+          new Date()
+        );
+
+        // 4. Insert rescheduled instalments
+        await tx.instalment.createMany({ data: instalments });
+
+        // 5. Update loan status to APPROVED
         const loan = await tx.loan.update({
           where: { id },
           data: {
@@ -601,6 +637,7 @@ export default async function loanRoutes(fastify, opts) {
           },
         });
 
+        // 6. Write Audit Log
         await tx.auditLog.create({
           data: {
             action: "LOAN_APPROVE",
@@ -611,7 +648,7 @@ export default async function loanRoutes(fastify, opts) {
           }
         });
 
-        return { success: true, loan };
+        return { success: true, loan, instalmentCount: instalments.length };
       });
     },
   });
