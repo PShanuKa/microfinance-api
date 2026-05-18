@@ -13,11 +13,12 @@ export default async function groupRoutes(fastify, opts) {
           search: { type: "string" },
           status: { type: "string" }, // "All", "Active", "Inactive"
           collectionDay: { type: "string" }, // "All", "1", "2"...
+          branchId: { type: "string" }, // "All" or branchId
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, search, status, collectionDay } = request.query;
+      const { page, limit, search, status, collectionDay, branchId } = request.query;
       const skip = (page - 1) * limit;
 
       const where = {
@@ -50,6 +51,7 @@ export default async function groupRoutes(fastify, opts) {
           } : {},
           status && status !== "All" ? { status: status === "Active" } : {},
           collectionDay && collectionDay !== "All" ? { collectionDay: parseInt(collectionDay) } : {},
+          branchId && branchId !== "All" ? { branchId } : {},
         ]
       };
 
