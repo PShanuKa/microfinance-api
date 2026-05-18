@@ -356,3 +356,13 @@ model CollectionAttachment {
 
   @@map("collection_attachments")
 }
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  address   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("branches")
+}
