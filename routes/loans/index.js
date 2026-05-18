@@ -616,17 +616,10 @@ export default async function loanRoutes(fastify, opts) {
   fastify.put("/:id/approve", {
     schema: {
       params: { type: "object", properties: { id: { type: "string" } } },
-      body: {
-        type: "object",
-        required: ["approvedById"],
-        properties: {
-          approvedById: { type: "string" },
-        }
-      }
     },
     handler: async (request, reply) => {
       const { id } = request.params;
-      const { approvedById } = request.body;
+      const approvedById = request.user.id;
 
       return await fastify.prisma.$transaction(async (tx) => {
         // 1. Fetch loan and group details

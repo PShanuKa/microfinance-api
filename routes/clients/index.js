@@ -49,6 +49,15 @@ export default async function clientRoutes(fastify, opts) {
             documents: {
               include: { attachment: true }
             },
+            instalments: {
+              select: {
+                loan: {
+                  select: {
+                    status: true
+                  }
+                }
+              }
+            },
             groupMembers: {
               include: {
                 group: {
