@@ -13,8 +13,13 @@ const s3Client = new S3Client({
   forcePathStyle: true, // Required for MinIO
 });
 
-export const uploadFile = async (fileStream, fileName, contentType) => {
-  const objectKey = `${randomUUID()}-${fileName}`;
+export const uploadFile = async (fileStream, fileName, contentType, category = "other") => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.toLocaleString("en-US", { month: "short" }).toLowerCase();
+  
+  const cleanCategory = String(category).trim().toLowerCase() || "other";
+  const objectKey = `${year}/${month}/${cleanCategory}/${randomUUID()}-${fileName}`;
   const bucket = process.env.S3_BUCKET;
 
   const upload = new Upload({

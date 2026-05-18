@@ -10,11 +10,14 @@ export default async function attachmentRoutes(fastify, opts) {
       throw createBadRequestError("No file uploaded");
     }
 
+    const { category } = request.query;
+
     try {
       const { bucket, objectKey, fileUrl } = await uploadFile(
         data.file,
         data.filename,
-        data.mimetype
+        data.mimetype,
+        category
       );
 
       const attachment = await fastify.prisma.attachment.create({
