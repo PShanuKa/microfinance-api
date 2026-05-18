@@ -26,7 +26,11 @@ export default async function groupRoutes(fastify, opts) {
             OR: [
               { name: { contains: search } },
               { groupNo: { contains: search } },
-              { branch: { contains: search } },
+              {
+                branch: {
+                  name: { contains: search }
+                }
+              },
               {
                 officer: {
                   fullname: { contains: search }
@@ -56,6 +60,7 @@ export default async function groupRoutes(fastify, opts) {
           take: limit,
           include: {
             officer: { select: { id: true, fullname: true } },
+            branch: { select: { id: true, name: true } },
             members: {
               where: { isLeader: true },
               include: {
@@ -89,7 +94,7 @@ export default async function groupRoutes(fastify, opts) {
         type: "object",
         properties: {
           name: { type: "string" },
-          branch: { type: "string" },
+          branchId: { type: "string" },
           location: { type: "string" },
           collectionDay: { type: "number" },
           officerId: { type: "string" },
@@ -98,12 +103,12 @@ export default async function groupRoutes(fastify, opts) {
       },
     },
     handler: async (request, reply) => {
-      const { name, branch, collectionDay, officerId, location, createdBy } = request.body;
+      const { name, branchId, collectionDay, officerId, location, createdBy } = request.body;
 
       // Manual validation for field-level errors (since we use setError on frontend)
       const fields = {};
       if (!name || name.length < 3) fields.name = "Group name must be at least 3 characters";
-      if (!branch) fields.branch = "Branch is required";
+      if (!branchId) fields.branchId = "Branch is required";
       if (!collectionDay) fields.collectionDay = "Collection day is required";
       if (!officerId) fields.officerId = "Collection officer is required";
 
@@ -134,7 +139,7 @@ export default async function groupRoutes(fastify, opts) {
       const group = await fastify.prisma.group.create({
         data: {
           name,
-          branch,
+          branchId: branchId || null,
           collectionDay,
           officerId,
           location,
@@ -153,6 +158,7 @@ export default async function groupRoutes(fastify, opts) {
       where: { id },
       include: {
         officer: { select: { id: true, fullname: true } },
+        branch: { select: { id: true, name: true } },
         members: {
           include: {
             client: true,
@@ -176,7 +182,7 @@ export default async function groupRoutes(fastify, opts) {
         type: "object",
         properties: {
           name: { type: "string" },
-          branch: { type: "string" },
+          branchId: { type: "string" },
           location: { type: "string" },
           collectionDay: { type: "number" },
           officerId: { type: "string" },
@@ -187,7 +193,7 @@ export default async function groupRoutes(fastify, opts) {
     },
     handler: async (request, reply) => {
       const { id } = request.params;
-      const { name, branch, collectionDay, officerId, location, status, updatedBy } = request.body;
+      const { name, branchId, collectionDay, officerId, location, status, updatedBy } = request.body;
 
       // Check if group has associated loans
       const existingLoan = await fastify.prisma.loan.findFirst({
@@ -201,7 +207,7 @@ export default async function groupRoutes(fastify, opts) {
       // Manual validation for field-level errors
       const fields = {};
       if (name !== undefined && name.length < 3) fields.name = "Group name must be at least 3 characters";
-      if (branch === "") fields.branch = "Branch cannot be empty";
+      if (branchId === "") fields.branchId = "Branch cannot be empty";
       
       if (Object.keys(fields).length > 0) {
         throw createBadRequestError("Validation error", fields);
@@ -220,7 +226,7 @@ export default async function groupRoutes(fastify, opts) {
         where: { id },
         data: {
           name,
-          branch,
+          branchId: branchId || null,
           collectionDay,
           officerId,
           location,
@@ -342,6 +348,7 @@ export default async function groupRoutes(fastify, opts) {
     const group = await fastify.prisma.group.findUnique({
       where: { id: groupId },
       include: {
+        branch: { select: { id: true, name: true } },
         members: {
           include: {
             client: {
@@ -379,7 +386,7 @@ export default async function groupRoutes(fastify, opts) {
       };
     });
 
-    return { success: true, group: { name: group.name, branch: group.branch }, members };
+    return { success: true, group: { name: group.name, branch: group.branch ? group.branch.name : "" }, members };
   });
 
   // Remove Member

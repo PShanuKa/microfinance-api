@@ -18,7 +18,7 @@ export default async function authRoutes(fastify, opts) {
             type: "string", 
             enum: ["ADMIN", "BRANCH_MANAGER", "LOAN_OFFICER", "COLLECTION_OFFICER", "APPROVER", "AUDITOR"] 
           },
-          branch: { type: "array", items: { type: "string" } },
+          branchId: { type: "string" },
         },
         errorMessage: {
           required: {
@@ -37,7 +37,7 @@ export default async function authRoutes(fastify, opts) {
       },
     },
     handler: async (request, reply) => {
-      const { fullname, email, password, role, branch } = request.body;
+      const { fullname, email, password, role, branchId } = request.body;
 
       const existingUser = await fastify.prisma.user.findUnique({
         where: { email },
@@ -55,7 +55,7 @@ export default async function authRoutes(fastify, opts) {
           email,
           password: hashedPassword,
           role,
-          branch: branch || [],
+          branchId: branchId || null,
         },
       });
 

@@ -43,7 +43,13 @@ export default async function userRoutes(fastify, opts) {
             email: true,
             role: true,
             status: true,
-            branch: true,
+            branchId: true,
+            branch: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
             lastLogin: true,
             createdAt: true,
           },
@@ -83,21 +89,37 @@ export default async function userRoutes(fastify, opts) {
           fullname: { type: "string", minLength: 3 },
           email: { type: "string", format: "email" },
           role: { type: "string" },
-          branch: { type: "array", items: { type: "string" } },
+          branchId: { type: "string" },
           status: { type: "boolean" },
         },
       },
     },
     handler: async (request, reply) => {
       const { id } = request.params;
-      const { fullname, email, role, branch, status } = request.body;
+      const { fullname, email, role, branchId, status } = request.body;
 
       const user = await fastify.prisma.user.findUnique({ where: { id } });
       if (!user) throw createNotFoundError("User not found");
 
       const updatedUser = await fastify.prisma.user.update({
         where: { id },
-        data: { fullname, email, role, branch, status },
+        data: { fullname, email, role, branchId: branchId || null, status },
+        select: {
+          id: true,
+          fullname: true,
+          email: true,
+          role: true,
+          status: true,
+          branchId: true,
+          branch: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          lastLogin: true,
+          createdAt: true,
+        }
       });
 
       return { success: true, user: updatedUser };

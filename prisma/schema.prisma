@@ -17,7 +17,8 @@ model User {
   password  String
   role      Role     @default(LOAN_OFFICER)
   status    Boolean  @default(true)
-  branch    Json?    // Array of branch names or IDs
+  branchId  String?
+  branch    Branch?  @relation("BranchUsers", fields: [branchId], references: [id])
   lastLogin DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -72,7 +73,8 @@ model Group {
   id            String   @id @default(cuid())
   groupNo       String?  @unique
   name          String
-  branch        String
+  branchId      String?
+  branch        Branch?  @relation("BranchGroups", fields: [branchId], references: [id])
   location      String?
   collectionDay Int      // 1 = Monday, 7 = Sunday
   officerId     String
@@ -363,6 +365,8 @@ model Branch {
   address   String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  users     User[]   @relation("BranchUsers")
+  groups    Group[]  @relation("BranchGroups")
 
   @@map("branches")
 }

@@ -207,6 +207,7 @@ export default async function collectionRoutes(fastify, opts) {
       include: {
         group: { 
           include: {
+            branch: { select: { id: true, name: true } },
             members: {
               include: { client: { select: { fullname: true, phone: true } } }
             }
@@ -225,7 +226,7 @@ export default async function collectionRoutes(fastify, opts) {
         ...col,
         groupNo: group.groupNo,
         groupName: group.name,
-        location: group.branch,
+        location: group.branch ? group.branch.name : "Main Branch",
         center: group.location || "Main Center",
         leader: leader?.fullname || "No Leader",
         phone: leader?.phone || "N/A",
@@ -536,6 +537,7 @@ export default async function collectionRoutes(fastify, opts) {
             include: {
               group: {
                 include: {
+                  branch: { select: { id: true, name: true } },
                   members: {
                     include: {
                       client: { select: { fullname: true, phone: true } }
@@ -628,7 +630,7 @@ export default async function collectionRoutes(fastify, opts) {
             loanNo: inst.loan.loanNo,
             groupNo: group.groupNo || "N/A",
             groupName: group.name,
-            location: group.branch,
+            location: group.branch ? group.branch.name : "Main Branch",
             center: group.location || "Main Center",
             leader: leader?.fullname || "No Leader",
             phone: leader?.phone || "N/A",
