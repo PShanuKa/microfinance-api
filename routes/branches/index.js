@@ -3,7 +3,6 @@ import { createBadRequestError, createNotFoundError } from "../../utils/errors.j
 
 export default async function branchRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
-  fastify.addHook("preHandler", fastify.authorize(["ADMIN"]));
 
 
   // GetAll
@@ -35,6 +34,7 @@ export default async function branchRoutes(fastify, opts) {
 
   // Create
   fastify.post("/", {
+    preHandler: fastify.authorize(["ADMIN"]),
     schema: {
       body: {
         type: "object",
@@ -75,6 +75,7 @@ export default async function branchRoutes(fastify, opts) {
 
   // Update
   fastify.put("/:id", {
+    preHandler: fastify.authorize(["ADMIN"]),
     schema: {
       params: {
         type: "object",
@@ -128,6 +129,7 @@ export default async function branchRoutes(fastify, opts) {
 
   // Delete
   fastify.delete("/:id", {
+    preHandler: fastify.authorize(["ADMIN"]),
     schema: {
       params: {
         type: "object",
