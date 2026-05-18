@@ -1,5 +1,6 @@
 import fp from 'fastify-plugin';
 import fastifyJwt from '@fastify/jwt';
+import { createForbiddenError, createUnauthorizedError } from '../utils/errors.js';
 
 async function jwtPlugin(fastify, options) {
   await fastify.register(fastifyJwt, {
@@ -15,10 +16,24 @@ async function jwtPlugin(fastify, options) {
         error.statusCode = 401;
         throw error;
       }
-      const error = new Error('Unauthorized');
-      error.statusCode = 401;
-      throw error;
+      throw createUnauthorizedError();
     }
+  });
+
+  // Reusable role-based authorization middleware
+  fastify.decorate("authorize", (allowedRoles) => {
+    return async (request, reply) => {
+      // 1. Ensure user is authenticated
+      if (!request.user) {
+        throw createUnauthorizedError();
+      }
+
+      // 2. Check if the user's role is allowed
+      const userRole = request.user.role;
+      if (!allowedRoles.includes(userRole)) {
+        throw createForbiddenError("Forbidden: You do not have permission to access this resource");
+      }
+    };
   });
 }
 
