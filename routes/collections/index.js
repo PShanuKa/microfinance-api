@@ -508,7 +508,7 @@ export default async function collectionRoutes(fastify, opts) {
     },
     handler: async (request, reply) => {
       const { date, loanId } = request.query;
-      const targetDate = date || "2026-06-14";
+      const targetDate = date || new Date().toISOString().split("T")[0];
       
       const start = new Date(targetDate);
       start.setHours(0, 0, 0, 0);
