@@ -141,11 +141,47 @@ export default async function loanRoutes(fastify, opts) {
 
       const group = await fastify.prisma.group.findUnique({
         where: { id: data.groupId },
-        include: { members: true },
+        include: {
+          members: {
+            include: {
+              client: {
+                include: {
+                  instalments: {
+                    select: {
+                      loan: {
+                        select: {
+                          id: true,
+                          loanNo: true,
+                          status: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
       });
 
       if (!group) throw createNotFoundError("Group not found");
       if (group.members.length === 0) throw createBadRequestError("Group has no members");
+
+      // Check if any member is Blacklisted or has an active/approved loan
+      for (const member of group.members) {
+        if (member.client) {
+          if (member.client.status === "BLACKLISTED") {
+            throw createBadRequestError(`Client ${member.client.fullname} is Blacklisted. Cannot create loan.`);
+          }
+          
+          const activeInstalment = member.client.instalments?.find(
+            inst => inst.loan?.status === "APPROVED" || inst.loan?.status === "ACTIVE"
+          );
+          if (activeInstalment) {
+            throw createBadRequestError(`Client ${member.client.fullname} already has an active loan (${activeInstalment.loan.loanNo}). Cannot create loan.`);
+          }
+        }
+      }
 
       // 3. Check if there's an active loan for this group already (Max Limit)
       const activeLoansCount = await fastify.prisma.loan.count({

@@ -163,7 +163,19 @@ export default async function groupRoutes(fastify, opts) {
         branch: { select: { id: true, name: true } },
         members: {
           include: {
-            client: true,
+            client: {
+              include: {
+                instalments: {
+                  select: {
+                    loan: {
+                      select: {
+                        status: true
+                      }
+                    }
+                  }
+                }
+              }
+            },
           },
         },
         loans: {
