@@ -148,6 +148,9 @@ model Loan {
   approvedById         String?
   approvedBy           User?      @relation("ApprovedLoans", fields: [approvedById], references: [id])
 
+  branchId             String?
+  branch               Branch?    @relation("BranchLoans", fields: [branchId], references: [id])
+
   instalments          Instalment[]
   guarantors           Guarantor[]
 
@@ -368,6 +371,7 @@ model Branch {
   updatedAt DateTime @updatedAt
   users     User[]   @relation("BranchUsers")
   groups    Group[]  @relation("BranchGroups")
+  loans     Loan[]   @relation("BranchLoans")
 
   @@map("branches")
 }

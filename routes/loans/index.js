@@ -165,6 +165,9 @@ export default async function loanRoutes(fastify, opts) {
       });
 
       if (!group) throw createNotFoundError("Group not found");
+      if (!group.branchId) {
+        throw createBadRequestError("This group is not associated with any branch. A group must have a branch before applying for a loan.");
+      }
       if (group.members.length === 0) throw createBadRequestError("Group has no members");
 
       // Check if any member is Blacklisted or has an active/approved loan
@@ -211,6 +214,7 @@ export default async function loanRoutes(fastify, opts) {
           data: {
             loanNo,
             groupId: data.groupId,
+            branchId: group.branchId,
             leaderLentAmount: data.leaderLentAmount,
             memberLentAmount: data.memberLentAmount,
             totalWeeks: data.totalWeeks,
