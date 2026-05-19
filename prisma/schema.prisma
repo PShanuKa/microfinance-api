@@ -26,6 +26,7 @@ model User {
   refreshTokens  RefreshToken[]
   officerGroups  Group[]        @relation("OfficerGroups")
   approvedLoans  Loan[]         @relation("ApprovedLoans")
+  collections    Collection[]   @relation("CollectorCollections")
 
   @@map("users")
 }
@@ -241,6 +242,7 @@ model Collection {
   weekNumber       Int?
   instalmentNumber Int
   collectorId      String
+  collector        User             @relation("CollectorCollections", fields: [collectorId], references: [id])
   amountCollected  Decimal          @db.Decimal(10, 2)
   bankReference    String?
   breakdownNotes   String?          @db.Text

@@ -16,7 +16,6 @@ export default async function collectionRoutes(fastify, opts) {
           date: { type: "string", format: "date-time" },
           weekNumber: { type: "number" },
           instalmentNumber: { type: "number" },
-          collectorId: { type: "string" },
           bankReference: { type: "string" },
           breakdownNotes: { type: "string" },
           attachments: {
@@ -46,8 +45,8 @@ export default async function collectionRoutes(fastify, opts) {
       }
     },
     handler: async (request, reply) => {
-      const { groupId, loanId, date, weekNumber, instalmentNumber, collectorId, breakdownData, bankReference, breakdownNotes, attachments } = request.body;
-
+      const { groupId, loanId, date, weekNumber, instalmentNumber,  breakdownData, bankReference, breakdownNotes, attachments } = request.body;
+      const collectorId = request.user.id;
       // 1. Validation
       const group = await fastify.prisma.group.findUnique({
         where: { id: groupId },
@@ -249,6 +248,12 @@ export default async function collectionRoutes(fastify, opts) {
       include: {
         group: true,
         loan: true,
+        collector: {
+          select: {
+            fullname: true,
+            email: true
+          }
+        },
         attachments: {
           include: {
             attachment: true
