@@ -464,7 +464,7 @@ export default async function collectionRoutes(fastify, opts) {
   // Reject Collection
   fastify.post("/:id/reject", async (request, reply) => {
     const { id } = request.params;
-    const { rejecterId = "ADMIN" } = request.body || {};
+    const { rejecterId = "ADMIN", rejectionReason } = request.body || {};
 
     const result = await fastify.prisma.$transaction(async (tx) => {
       const collection = await tx.collection.findUnique({ where: { id } });
@@ -473,7 +473,10 @@ export default async function collectionRoutes(fastify, opts) {
 
       await tx.collection.update({
         where: { id },
-        data: { status: "REJECTED" }
+        data: { 
+          status: "REJECTED",
+          rejectionReason
+        }
       });
 
       await tx.collectionItem.updateMany({
@@ -486,7 +489,8 @@ export default async function collectionRoutes(fastify, opts) {
           action: "COLLECTION_REJECTED",
           entity: "Collection",
           entityId: id,
-          userId: rejecterId
+          userId: rejecterId,
+          details: { message: "Rejected collection registry", rejectionReason }
         }
       });
 

@@ -244,6 +244,7 @@ model Collection {
   items            CollectionItem[]
   attachments      CollectionAttachment[]
   status           CollectionStatus @default(SUBMITTED)
+  rejectionReason  String?          @db.Text
   
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
