@@ -2,6 +2,8 @@
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 
 export default async function collectionRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
+
   // Create Group Collection Entry
   fastify.post("/", {
     schema: {
@@ -270,7 +272,14 @@ export default async function collectionRoutes(fastify, opts) {
   // Approve Collection
   fastify.post("/:id/approve", async (request, reply) => {
     const { id } = request.params;
-    const { approverId = "ADMIN", confirmOverpayment } = request.body || {};
+    const { confirmOverpayment } = request.body || {};
+    const approverId = request.user.id;
+
+    // Role check directly from JWT payload
+    const allowedRoles = ["ADMIN", "BRANCH_MANAGER", "APPROVER", "APPROVED"];
+    if (!allowedRoles.includes(request.user.role)) {
+      throw createBadRequestError("You do not have permission to approve collections.");
+    }
 
     // 1. Get collection and items to check for overpayments/conflicts
     const collectionData = await fastify.prisma.collection.findUnique({
@@ -464,7 +473,14 @@ export default async function collectionRoutes(fastify, opts) {
   // Reject Collection
   fastify.post("/:id/reject", async (request, reply) => {
     const { id } = request.params;
-    const { rejecterId = "ADMIN", rejectionReason } = request.body || {};
+    const { rejectionReason } = request.body || {};
+    const rejecterId = request.user.id;
+
+    // Role check directly from JWT payload
+    const allowedRoles = ["ADMIN", "BRANCH_MANAGER", "APPROVER", "APPROVED"];
+    if (!allowedRoles.includes(request.user.role)) {
+      throw createBadRequestError("You do not have permission to reject collections.");
+    }
 
     const result = await fastify.prisma.$transaction(async (tx) => {
       const collection = await tx.collection.findUnique({ where: { id } });
