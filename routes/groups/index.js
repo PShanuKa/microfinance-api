@@ -2,6 +2,8 @@
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 
 export default async function groupRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
+
   // Get all groups with pagination
   fastify.get("/", {
     schema: {
@@ -116,6 +118,26 @@ export default async function groupRoutes(fastify, opts) {
 
       if (Object.keys(fields).length > 0) {
         throw createBadRequestError("Validation error", fields);
+      }
+
+      // Fetch requesting user's profile to validate role and branch
+      const requestingUser = await fastify.prisma.user.findUnique({
+        where: { id: request.user.id }
+      });
+
+      if (!requestingUser) {
+        throw createBadRequestError("User not found");
+      }
+
+      // Check if user is a BRANCH_MANAGER or LOAN_OFFICER
+      const restrictedRoles = ["BRANCH_MANAGER", "LOAN_OFFICER"];
+      if (restrictedRoles.includes(requestingUser.role)) {
+        if (!requestingUser.branchId) {
+          throw createBadRequestError("Validation error", { branchId: "You do not have an assigned branch. Group creation is restricted." });
+        }
+        if (requestingUser.branchId !== branchId) {
+          throw createBadRequestError("Validation error", { branchId: "You are only permitted to create groups within your assigned branch." });
+        }
       }
 
       // Check if officer exists

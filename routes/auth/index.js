@@ -190,6 +190,7 @@ export default async function authRoutes(fastify, opts) {
         email: true,
         role: true,
         status: true,
+        branchId: true,
         branch: true,
         createdAt: true
       }
