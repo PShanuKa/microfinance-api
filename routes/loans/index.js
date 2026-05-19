@@ -369,7 +369,10 @@ export default async function loanRoutes(fastify, opts) {
         }
       }
     },
+    preHandler: [fastify.authenticate, fastify.authorize(['ADMIN', 'BRANCH_MANAGER', 'LOAN_OFFICER'])],
+      
     handler: async (request, reply) => {
+
       const { id } = request.params;
       const data = request.body;
 
@@ -385,8 +388,10 @@ export default async function loanRoutes(fastify, opts) {
       const loan = await fastify.prisma.loan.findUnique({
         where: { id },
       });
+      
 
       if (!loan) throw createNotFoundError("Loan not found");
+      
       if (loan.status !== "PENDING" && loan.status !== "DRAFT") throw createBadRequestError("Only pending or draft loans can be edited");
 
       const group = await fastify.prisma.group.findUnique({

@@ -260,7 +260,7 @@ model CollectionItem {
   collectionId String
   collection   Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   instalmentId String
-  instalment   Instalment       @relation(fields: [instalmentId], references: [id])
+  instalment   Instalment       @relation(fields: [instalmentId], references: [id], onDelete: Cascade)
   amount       Decimal          @db.Decimal(10, 2)
   status       CollectionStatus @default(SUBMITTED)
   
