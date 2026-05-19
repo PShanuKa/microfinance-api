@@ -123,6 +123,7 @@ export default async function clientRoutes(fastify, opts) {
         }
       },
     },
+    preHandler: fastify.authorize(["ADMIN", "BRANCH_MANAGER", "LOAN_OFFICER"]),
     handler: async (request, reply) => {
       const { fullname, nic, phone, address, job, status, profileImageId, documents } = request.body;
 
@@ -235,6 +236,7 @@ export default async function clientRoutes(fastify, opts) {
         }
       },
     },
+    preHandler: fastify.authorize(["ADMIN", "BRANCH_MANAGER", "LOAN_OFFICER"]),
     handler: async (request, reply) => {
       const { id } = request.params;
       const data = request.body;
@@ -339,6 +341,7 @@ export default async function clientRoutes(fastify, opts) {
         properties: { id: { type: "string" } },
       },
     },
+    preHandler: fastify.authorize(["ADMIN", "BRANCH_MANAGER", "LOAN_OFFICER"]),
     handler: async (request, reply) => {
       const { id } = request.params;
 
