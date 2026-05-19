@@ -16,11 +16,12 @@ export default async function loanRoutes(fastify, opts) {
           search: { type: "string" },
           status: { type: "string" },
           collectionDay: { type: "number" },
+          branchId: { type: "string" },
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, search, status, collectionDay } = request.query;
+      const { page, limit, search, status, collectionDay, branchId } = request.query;
       const skip = (page - 1) * limit;
 
       const where = {
@@ -33,6 +34,7 @@ export default async function loanRoutes(fastify, opts) {
           } : {},
           status && status !== "All" ? { status } : {},
           collectionDay ? { group: { collectionDay } } : {},
+          branchId && branchId !== "All" ? { branchId } : {},
         ],
       };
 
