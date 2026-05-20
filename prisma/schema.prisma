@@ -59,6 +59,7 @@ model Client {
   instalments  Instalment[]
   guarantors   Guarantor[]
   mortgageLoans MortgageLoan[] @relation("ClientMortgageLoans")
+  mortgageInstalments MortgageInstalment[]
 
   profileImageId String?
   profileImage   Attachment? @relation("ProfileImage", fields: [profileImageId], references: [id])
@@ -427,6 +428,7 @@ model MortgageLoan {
   
   collateralFiles      MortgageCollateral[]
   titledFiles          MortgageTitledFile[]
+  instalments          MortgageInstalment[]
   
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
@@ -458,3 +460,26 @@ model MortgageTitledFile {
 
   @@map("mortgage_titled_files")
 }
+
+model MortgageInstalment {
+  id               String   @id @default(cuid())
+  mortgageId       String
+  mortgage         MortgageLoan @relation(fields: [mortgageId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id])
+  
+  monthNumber      Int       // 1, 2, 3...
+  dueDate          DateTime  @db.Date
+  dueAmount        Decimal   @db.Decimal(10, 2)
+  paidAmount       Decimal   @default(0.00) @db.Decimal(10, 2)
+  remainingDue     Decimal   @db.Decimal(10, 2) // dueAmount - paidAmount
+  status           PaymentStatus @default(UNPAID)
+  paidAt           DateTime?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([mortgageId, clientId, monthNumber])
+  @@map("mortgage_instalments")
+}
+

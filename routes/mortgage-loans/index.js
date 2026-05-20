@@ -486,6 +486,26 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           }
         });
 
+        // Delete any existing instalments for safety
+        await tx.mortgageInstalment.deleteMany({
+          where: { mortgageId: id }
+        });
+
+        // Create the first month's interest instalment, marked as PAID
+        await tx.mortgageInstalment.create({
+          data: {
+            mortgageId: id,
+            clientId: existing.clientId,
+            monthNumber: 1,
+            dueDate: new Date(),
+            dueAmount: existing.upfrontInterest,
+            paidAmount: existing.upfrontInterest,
+            remainingDue: 0.00,
+            status: "PAID",
+            paidAt: new Date()
+          }
+        });
+
         await tx.auditLog.create({
           data: {
             action: "MORTGAGE_LOAN_APPROVE",
