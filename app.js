@@ -21,6 +21,7 @@ import userRoutes from "./routes/users/index.js";
 import clientRoutes from "./routes/clients/index.js";
 import groupRoutes from "./routes/groups/index.js";
 import loanRoutes from "./routes/loans/index.js";
+import mortgageLoanRoutes from "./routes/mortgage-loans/index.js";
 import collectionRoutes from "./routes/collections/index.js";
 import settingsRoutes from "./routes/settings/index.js";
 import nonCollectionWeekRoutes from "./routes/non-collection-weeks/index.js";
@@ -83,6 +84,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(clientRoutes, { prefix: "/api/clients" });
   await fastify.register(groupRoutes, { prefix: "/api/groups" });
   await fastify.register(loanRoutes, { prefix: "/api/loans" });
+  await fastify.register(mortgageLoanRoutes, { prefix: "/api/mortgage-loans" });
   await fastify.register(collectionRoutes, { prefix: "/api/collections" });
   await fastify.register(settingsRoutes, { prefix: "/api/settings" });
   await fastify.register(nonCollectionWeekRoutes, { prefix: "/api/non-collection-weeks" });

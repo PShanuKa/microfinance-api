@@ -141,6 +141,7 @@ fastify.post("/", {
 | `/api/attachments/*`          | Module-level addHook   | All routes protected ✅ (fixed)|
 | `/api/audit/*`                | Module-level addHook   | All routes protected           |
 | `/api/branches/*`             | Module-level addHook   | All routes protected           |
+| `/api/mortgage-loans/*`       | Module-level addHook   | All routes protected (authenticated & audit logged) |
 | `/api/dashboard/*`            | Module-level addHook   | All routes protected           |
 
 ### 🟡 PUBLIC Routes (Intentionally Unprotected)

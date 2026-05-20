@@ -27,6 +27,7 @@ model User {
   officerGroups  Group[]        @relation("OfficerGroups")
   approvedLoans  Loan[]         @relation("ApprovedLoans")
   collections    Collection[]   @relation("CollectorCollections")
+  createdMortgages MortgageLoan[] @relation("CreatedMortgageLoans")
 
   @@map("users")
 }
@@ -57,6 +58,7 @@ model Client {
   groupMembers GroupMember[]
   instalments  Instalment[]
   guarantors   Guarantor[]
+  mortgageLoans MortgageLoan[] @relation("ClientMortgageLoans")
 
   profileImageId String?
   profileImage   Attachment? @relation("ProfileImage", fields: [profileImageId], references: [id])
@@ -325,6 +327,8 @@ model Attachment {
   documents      ClientDocument[]
   guarantorDocs  GuarantorDocument[]
   collectionDocs CollectionAttachment[]
+  mortgageCollaterals MortgageCollateral[] @relation("CollateralAttachment")
+  mortgageTitledFiles MortgageTitledFile[] @relation("TitledAttachment")
 
   @@map("attachments")
 }
@@ -374,6 +378,82 @@ model Branch {
   users     User[]   @relation("BranchUsers")
   groups    Group[]  @relation("BranchGroups")
   loans     Loan[]   @relation("BranchLoans")
+  mortgageLoans MortgageLoan[] @relation("BranchMortgageLoans")
 
   @@map("branches")
+}
+
+enum MortgageStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  COMPLETED
+}
+
+enum AssetType {
+  VEHICLE
+  PROPERTY
+  GOLD
+  OTHER
+}
+
+model MortgageLoan {
+  id                   String             @id @default(cuid())
+  loanNo               String             @unique // ML-000001, etc.
+  clientId             String
+  client               Client             @relation("ClientMortgageLoans", fields: [clientId], references: [id])
+  
+  lentAmount           Decimal            @db.Decimal(10, 2)
+  interestRate         Decimal            @db.Decimal(10, 2)
+  upfrontInterest      Decimal            @db.Decimal(10, 2)
+  netCashDisbursed     Decimal            @db.Decimal(10, 2)
+  monthlyDueAmount     Decimal            @db.Decimal(10, 2)
+  dailyPenaltyAmount   Decimal            @db.Decimal(10, 2)
+  ltvRatio             Int
+  
+  assetType            AssetType          @default(OTHER)
+  assetDescription     String?            @db.Text
+  estimatedMarketValue Decimal            @db.Decimal(10, 2)
+  assessedValue        Decimal            @db.Decimal(10, 2)
+  
+  status               MortgageStatus     @default(DRAFT)
+  
+  createdById          String
+  createdBy            User               @relation("CreatedMortgageLoans", fields: [createdById], references: [id])
+  
+  branchId             String?
+  branch               Branch?            @relation("BranchMortgageLoans", fields: [branchId], references: [id])
+  
+  collateralFiles      MortgageCollateral[]
+  titledFiles          MortgageTitledFile[]
+  
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@map("mortgage_loans")
+}
+
+model MortgageCollateral {
+  id             String       @id @default(cuid())
+  mortgageId     String
+  mortgage       MortgageLoan @relation(fields: [mortgageId], references: [id], onDelete: Cascade)
+  attachmentId   String
+  attachment     Attachment   @relation("CollateralAttachment", fields: [attachmentId], references: [id])
+  name           String
+  createdAt      DateTime     @default(now())
+
+  @@map("mortgage_collateral")
+}
+
+model MortgageTitledFile {
+  id             String       @id @default(cuid())
+  mortgageId     String
+  mortgage       MortgageLoan @relation(fields: [mortgageId], references: [id], onDelete: Cascade)
+  attachmentId   String
+  attachment     Attachment   @relation("TitledAttachment", fields: [attachmentId], references: [id])
+  title          String
+  name           String
+  createdAt      DateTime     @default(now())
+
+  @@map("mortgage_titled_files")
 }

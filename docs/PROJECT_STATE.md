@@ -26,6 +26,7 @@
 | Audit Logging              | ✅ Done          | All CUD operations logged with user + details             |
 | Dashboard Stats            | ✅ Done          | Group/client counts, outstanding, collection rate, chart  |
 | File Attachments           | ✅ Done          | S3/MinIO upload + delete, linked to clients/guarantors    |
+| Mortgage Loans             | ✅ Done          | Client-bound collateral loans, automatic LTV calculation, S3 attachments, full listing dashboard and details viewer |
 | Health Check               | ✅ Done          | DB latency, system info, uptime                           |
 | Swagger Documentation      | ✅ Done          | Auto-generated at /documentation                          |
 | Rate Limiting              | 🟡 Partial      | Package installed but NOT registered in app.js            |
