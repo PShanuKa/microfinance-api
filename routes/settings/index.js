@@ -1,5 +1,7 @@
 // routes/settings/index.js
 export default async function settingsRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
+
   // Get settings
   fastify.get("/", async (request, reply) => {
     let settings = await fastify.prisma.settings.findUnique({

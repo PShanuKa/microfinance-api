@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 
 export default async function userRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
+
   // Get all users with pagination
   fastify.get("/", {
     schema: {

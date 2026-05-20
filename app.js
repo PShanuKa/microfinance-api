@@ -91,6 +91,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(branchRoutes, { prefix: "/api/branches" });
   await fastify.register(dashboardRoutes, { prefix: "/api/dashboard" });
 
+  // PUBLIC ROUTE — no auth required (health check)
   fastify.get("/api/health", async (request, reply) => {
     const systemInfo = getSystemInfo();
 
@@ -125,6 +126,7 @@ export async function buildApp(opts = {}) {
     };
   });
 
+  // PUBLIC ROUTE — no auth required (API info)
   fastify.get("/", async () => {
     return { message: "Microfinance API Services" };
   });

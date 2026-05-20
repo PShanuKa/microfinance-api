@@ -2,6 +2,8 @@
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 
 export default async function nonCollectionWeekRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
+
   // Get all
   fastify.get("/", async (request, reply) => {
     const weeks = await fastify.prisma.nonCollectionWeek.findMany({

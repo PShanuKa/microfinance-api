@@ -3,6 +3,8 @@ import { uploadFile, deleteFile } from "../../utils/s3Client.js";
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 
 export default async function attachmentRoutes(fastify, opts) {
+  fastify.addHook("preHandler", fastify.authenticate);
+
   // POST /api/attachments/upload
   fastify.post("/upload", async (request, reply) => {
     const data = await request.file();

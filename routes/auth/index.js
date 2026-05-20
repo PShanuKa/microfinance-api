@@ -4,7 +4,7 @@ import { generateTokens } from "../../utils/tokens.js";
 import { createBadRequestError, createUnauthorizedError } from "../../utils/errors.js";
 
 export default async function authRoutes(fastify, opts) {
-  // Register Route
+  // PUBLIC ROUTE — no auth required (user registration)
   fastify.post("/register", {
     schema: {
       body: {
@@ -83,7 +83,7 @@ export default async function authRoutes(fastify, opts) {
     },
   });
 
-  // Login Route
+  // PUBLIC ROUTE — no auth required (user login)
   fastify.post("/login", {
     schema: {
       body: {
@@ -148,7 +148,7 @@ export default async function authRoutes(fastify, opts) {
     },
   });
 
-  // Refresh Token Route
+  // PUBLIC ROUTE — no auth required (token refresh uses refresh token)
   fastify.post("/refresh", async (request, reply) => {
     const { refreshToken } = request.body;
 
