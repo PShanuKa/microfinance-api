@@ -179,7 +179,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
             assetDescription: data.assetDescription,
             estimatedMarketValue: data.estimatedMarketValue,
             assessedValue: data.assessedValue,
-            status: data.status || "PENDING",
+            status: "DRAFT",
             createdById: creatorId,
             branchId: creator.branchId || null,
           }
@@ -409,6 +409,52 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         success: true,
         mortgage
       };
+    }
+  });
+
+  // PUT /api/mortgage-loans/:id/send-for-approval - Submit DRAFT mortgage for approval
+  fastify.put("/:id/send-for-approval", {
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } }
+      }
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params;
+
+      const mortgage = await fastify.prisma.$transaction(async (tx) => {
+        const existing = await tx.mortgageLoan.findUnique({ where: { id } });
+        if (!existing) {
+          throw createNotFoundError("Mortgage loan not found");
+        }
+        if (existing.status !== "DRAFT") {
+          throw createBadRequestError("Only DRAFT mortgage loans can be submitted for approval.");
+        }
+
+        const updated = await tx.mortgageLoan.update({
+          where: { id },
+          data: {
+            status: "PENDING",
+            rejectionReason: null,
+          }
+        });
+
+        await tx.auditLog.create({
+          data: {
+            action: "MORTGAGE_LOAN_SUBMIT",
+            entity: "MORTGAGE_LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { loanNo: updated.loanNo, submittedBy: request.user.id }
+          }
+        });
+
+        return updated;
+      });
+
+      return { success: true, mortgage };
     }
   });
 
