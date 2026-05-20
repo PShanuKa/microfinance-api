@@ -121,6 +121,8 @@ fastify.post("/", {
 | `POST /api/branches`          | ADMIN                                          |
 | `PUT /api/branches/:id`       | ADMIN                                          |
 | `DELETE /api/branches/:id`    | ADMIN                                          |
+| `PUT /api/mortgage-loans/:id/approve` | ADMIN, BRANCH_MANAGER, APPROVER        |
+| `PUT /api/mortgage-loans/:id/reject`  | ADMIN, BRANCH_MANAGER, APPROVER        |
 
 ---
 

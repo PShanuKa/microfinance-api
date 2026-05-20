@@ -417,6 +417,7 @@ model MortgageLoan {
   assessedValue        Decimal            @db.Decimal(10, 2)
   
   status               MortgageStatus     @default(DRAFT)
+  rejectionReason      String?            @db.Text
   
   createdById          String
   createdBy            User               @relation("CreatedMortgageLoans", fields: [createdById], references: [id])
