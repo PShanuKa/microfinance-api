@@ -30,6 +30,7 @@ import auditRoutes from "./routes/audit/index.js";
 import branchRoutes from "./routes/branches/index.js";
 import dashboardRoutes from "./routes/dashboard/index.js";
 import fastifyMultipart from "@fastify/multipart";
+import schedulerPlugin from "./plugins/scheduler.js";
 
 
 export async function buildApp(opts = {}) {
@@ -73,6 +74,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(corsPlugin);
   await fastify.register(swaggerPlugin);
   await fastify.register(prismaPlugin);
+  await fastify.register(schedulerPlugin);
   await fastify.register(fastifyMultipart);
 
   // Register global error handler

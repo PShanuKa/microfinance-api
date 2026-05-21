@@ -419,6 +419,7 @@ model MortgageLoan {
   
   status               MortgageStatus     @default(DRAFT)
   rejectionReason      String?            @db.Text
+  approvedAt           DateTime?
   
   createdById          String
   createdBy            User               @relation("CreatedMortgageLoans", fields: [createdById], references: [id])

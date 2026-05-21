@@ -239,7 +239,8 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         createdBy: { select: { id: true, fullname: true, email: true } },
         branch: { select: { id: true, name: true } },
         collateralFiles: { include: { attachment: true } },
-        titledFiles: { include: { attachment: true } }
+        titledFiles: { include: { attachment: true } },
+        instalments: { orderBy: { monthNumber: "asc" } }
       }
     });
 
@@ -478,10 +479,13 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           throw createNotFoundError("Mortgage loan not found");
         }
 
+        const approvedAt = new Date();
+
         const updated = await tx.mortgageLoan.update({
           where: { id },
           data: {
             status: "APPROVED",
+            approvedAt,
             rejectionReason: null,
           }
         });
@@ -491,18 +495,24 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           where: { mortgageId: id }
         });
 
+        // Due date = approval date + 3 days
+        const firstDueDate = new Date(approvedAt);
+        firstDueDate.setDate(approvedAt.getDate() + 3);
+
         // Create the first month's interest instalment, marked as PAID
+        // createdAt is set to the approval date so the cron can use it as the base
         await tx.mortgageInstalment.create({
           data: {
             mortgageId: id,
             clientId: existing.clientId,
             monthNumber: 1,
-            dueDate: new Date(),
+            dueDate: firstDueDate,
             dueAmount: existing.upfrontInterest,
             paidAmount: existing.upfrontInterest,
             remainingDue: 0.00,
             status: "PAID",
-            paidAt: new Date()
+            paidAt: approvedAt,
+            createdAt: approvedAt,
           }
         });
 
