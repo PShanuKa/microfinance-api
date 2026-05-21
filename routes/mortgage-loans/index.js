@@ -229,6 +229,99 @@ export default async function mortgageLoanRoutes(fastify, opts) {
     }
   });
 
+  // GET /api/mortgage-loans/collections - Fetch collections list with search, filtering, and pagination
+  fastify.get("/collections", {
+    schema: {
+      query: {
+        type: "object",
+        properties: {
+          page: { type: "number", default: 1 },
+          limit: { type: "number", default: 10 },
+          search: { type: "string" },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { page, limit, search } = request.query;
+      const skip = (page - 1) * limit;
+
+      const where = {
+        AND: [
+          search ? {
+            OR: [
+              { mortgage: { loanNo: { contains: search } } },
+              { client: { fullname: { contains: search } } },
+              { client: { clientNo: { contains: search } } },
+            ]
+          } : {},
+        ],
+      };
+
+      const [collections, total] = await Promise.all([
+        fastify.prisma.mortgageCollection.findMany({
+          where,
+          skip,
+          take: limit,
+          include: {
+            client: { select: { id: true, fullname: true, clientNo: true } },
+            mortgage: { select: { id: true, loanNo: true } },
+            collectedBy: { select: { id: true, fullname: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        fastify.prisma.mortgageCollection.count({ where }),
+      ]);
+
+      return {
+        success: true,
+        collections,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    },
+  });
+
+  // GET /api/mortgage-loans/collections/:id - Fetch single collection details
+  fastify.get("/collections/:id", async (request, reply) => {
+    const { id } = request.params;
+    const collection = await fastify.prisma.mortgageCollection.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        mortgage: {
+          select: {
+            id: true,
+            loanNo: true,
+            lentAmount: true,
+            interestRate: true,
+            netCashDisbursed: true,
+            monthlyDueAmount: true,
+            dailyPenaltyAmount: true,
+          }
+        },
+        collectedBy: { select: { id: true, fullname: true, email: true } },
+        items: {
+          include: {
+            instalment: true
+          }
+        }
+      }
+    });
+
+    if (!collection) {
+      throw createNotFoundError("Mortgage collection not found");
+    }
+
+    return {
+      success: true,
+      collection
+    };
+  });
+
   // GET /api/mortgage-loans/:id - Fetch single record details
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;
