@@ -46,7 +46,7 @@ export async function processDailyPenalties(prisma, log) {
 
       const activePenaltyInstalments = loan.instalments.filter(inst => {
         const graceEnd = normalizeDate(inst.dueDate);
-        graceEnd.setUTCDate(graceEnd.getUTCDate() + 3);
+       
         
         const penaltyEnd = normalizeDate(inst.dueDate);
         penaltyEnd.setUTCMonth(penaltyEnd.getUTCMonth() + 1);
@@ -76,7 +76,7 @@ export async function processDailyPenalties(prisma, log) {
 
     
         const graceEnd = normalizeDate(inst.dueDate);
-        graceEnd.setUTCDate(graceEnd.getUTCDate() + 3);
+    
 
         const penaltyEnd = normalizeDate(inst.dueDate);
         penaltyEnd.setUTCMonth(penaltyEnd.getUTCMonth() + 1);
