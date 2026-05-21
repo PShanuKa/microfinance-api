@@ -858,6 +858,9 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           collectionItemsCount: collectionItemsToCreate.length,
           principalReduction
         };
+      }, {
+        maxWait: 15000, // 15 seconds max wait to acquire transaction lock
+        timeout: 30000  // 30 seconds max execution time
       });
 
       return {
