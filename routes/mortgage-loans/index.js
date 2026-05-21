@@ -240,7 +240,19 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         branch: { select: { id: true, name: true } },
         collateralFiles: { include: { attachment: true } },
         titledFiles: { include: { attachment: true } },
-        instalments: { orderBy: { monthNumber: "asc" } }
+        instalments: {
+          include: {
+            collectionItems: true
+          },
+          orderBy: { monthNumber: "asc" }
+        },
+        collections: {
+          include: {
+            items: true,
+            collectedBy: { select: { fullname: true } }
+          },
+          orderBy: { createdAt: "desc" }
+        }
       }
     });
 
@@ -582,6 +594,184 @@ export default async function mortgageLoanRoutes(fastify, opts) {
       });
 
       return { success: true, mortgage };
+    }
+  });
+
+  // POST /api/mortgage-loans/:id/payment - Record Mortgage Payment
+  fastify.post("/:id/payment", {
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } }
+      },
+      body: {
+        type: "object",
+        required: ["amount"],
+        properties: {
+          amount: { type: "number", minimum: 0.01 },
+          notes: { type: "string" }
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params;
+      const { amount, notes } = request.body;
+      const collectedById = request.user.id;
+
+      const result = await fastify.prisma.$transaction(async (tx) => {
+        // 1. Fetch Mortgage Loan
+        const mortgage = await tx.mortgageLoan.findUnique({
+          where: { id },
+          include: {
+            instalments: {
+              orderBy: { monthNumber: "asc" }
+            }
+          }
+        });
+
+        if (!mortgage) {
+          throw createNotFoundError("Mortgage loan not found");
+        }
+
+        if (mortgage.status !== "APPROVED" && mortgage.status !== "COMPLETED") {
+          throw createBadRequestError("Payments can only be recorded for APPROVED or COMPLETED mortgage loans.");
+        }
+
+        let amountLeft = Number(amount);
+        const totalPaymentAmount = amountLeft;
+        let principalReduction = 0;
+
+        const collectionItemsToCreate = [];
+
+        // 2. Fetch all unpaid/partial/overdue instalments
+        const unpaidInstalments = mortgage.instalments.filter(
+          inst => inst.status !== "PAID" || Number(inst.remainingDue) > 0
+        );
+
+        for (const instalment of unpaidInstalments) {
+          if (amountLeft <= 0) break;
+
+          // Fetch all collection items for this instalment to sum penaltyPaid
+          const existingItems = await tx.mortgageCollectionItem.findMany({
+            where: { instalmentId: instalment.id }
+          });
+
+          const totalPenaltyPaid = existingItems.reduce(
+            (sum, item) => sum + Number(item.penaltyPaid),
+            0
+          );
+
+          const outstandingPenalty = Math.max(0, Number(instalment.penaltyAmount) - totalPenaltyPaid);
+          const outstandingBaseDue = Math.max(0, Number(instalment.dueAmount) - Number(instalment.paidAmount));
+
+          let penaltyPaidThisInstalment = 0;
+          let duePaidThisInstalment = 0;
+
+          // Prioritize paying penalty first
+          if (outstandingPenalty > 0) {
+            const p = Math.min(amountLeft, outstandingPenalty);
+            penaltyPaidThisInstalment = p;
+            amountLeft -= p;
+          }
+
+          // Then pay the base due
+          if (amountLeft > 0 && outstandingBaseDue > 0) {
+            const d = Math.min(amountLeft, outstandingBaseDue);
+            duePaidThisInstalment = d;
+            amountLeft -= d;
+          }
+
+          if (penaltyPaidThisInstalment > 0 || duePaidThisInstalment > 0) {
+            const totalPaidThisInstalment = penaltyPaidThisInstalment + duePaidThisInstalment;
+            const newRemainingDue = Math.max(0, Number(instalment.remainingDue) - totalPaidThisInstalment);
+            const newPaidAmount = Number(instalment.paidAmount) + duePaidThisInstalment;
+
+            const isFullyPaid = newRemainingDue === 0;
+
+            await tx.mortgageInstalment.update({
+              where: { id: instalment.id },
+              data: {
+                paidAmount: newPaidAmount,
+                remainingDue: newRemainingDue,
+                status: isFullyPaid ? "PAID" : "PARTIAL",
+                paidAt: isFullyPaid ? new Date() : instalment.paidAt,
+              }
+            });
+
+            collectionItemsToCreate.push({
+              instalmentId: instalment.id,
+              penaltyPaid: penaltyPaidThisInstalment,
+              duePaid: duePaidThisInstalment,
+              totalPaid: totalPaidThisInstalment
+            });
+          }
+        }
+
+        // 3. Excess payment reduces the principal
+        if (amountLeft > 0) {
+          principalReduction = amountLeft;
+          await tx.mortgageLoan.update({
+            where: { id },
+            data: {
+              principalPaid: { increment: principalReduction }
+            }
+          });
+        }
+
+        // 4. Create Mortgage Collection record
+        const collection = await tx.mortgageCollection.create({
+          data: {
+            mortgageId: id,
+            clientId: mortgage.clientId,
+            amount: totalPaymentAmount,
+            principalReduction,
+            notes,
+            collectedById,
+          }
+        });
+
+        // 5. Create Collection Items
+        if (collectionItemsToCreate.length > 0) {
+          await tx.mortgageCollectionItem.createMany({
+            data: collectionItemsToCreate.map(item => ({
+              collectionId: collection.id,
+              instalmentId: item.instalmentId,
+              penaltyPaid: item.penaltyPaid,
+              duePaid: item.duePaid,
+              totalPaid: item.totalPaid,
+            }))
+          });
+        }
+
+        // 6. Write Audit Log
+        await tx.auditLog.create({
+          data: {
+            action: "MORTGAGE_LOAN_PAYMENT",
+            entity: "MORTGAGE_LOAN",
+            entityId: id,
+            userId: collectedById,
+            details: {
+              loanNo: mortgage.loanNo,
+              amount: totalPaymentAmount,
+              principalReduction,
+              collectionId: collection.id
+            }
+          }
+        });
+
+        return {
+          collection,
+          collectionItemsCount: collectionItemsToCreate.length,
+          principalReduction
+        };
+      });
+
+      return {
+        success: true,
+        message: "Payment successfully recorded",
+        ...result
+      };
     }
   });
 }
