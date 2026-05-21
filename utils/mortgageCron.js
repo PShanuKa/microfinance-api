@@ -85,26 +85,42 @@ export async function processMortgageInstalments(prisma, log) {
         // Month 2+ always use the regular monthly interest amount
         const dueAmount = mortgage.monthlyDueAmount;
 
-        await prisma.mortgageInstalment.create({
-          data: {
-            mortgageId: mortgage.id,
-            clientId: mortgage.clientId,
+        // Use upsert so that if the record already exists (race condition or
+        // manual re-run), we simply skip it without throwing a P2002 error.
+        const result = await prisma.mortgageInstalment.upsert({
+          where: {
+            mortgageId_clientId_monthNumber: {
+              mortgageId:  mortgage.id,
+              clientId:    mortgage.clientId,
+              monthNumber: m,
+            }
+          },
+          create: {
+            mortgageId:  mortgage.id,
+            clientId:    mortgage.clientId,
             monthNumber: m,
-            dueDate: instDueDate,
-            dueAmount: dueAmount,
-            paidAmount: 0.0,
+            dueDate:     instDueDate,
+            dueAmount:   dueAmount,
+            paidAmount:  0.0,
             remainingDue: dueAmount,
-            status: "UNPAID",
-            createdAt: instCreationDate, // anniversary date as creation timestamp
-          }
+            status:      "UNPAID",
+            createdAt:   instCreationDate, // anniversary date as creation timestamp
+          },
+          // No-op: if the record already exists, leave it untouched
+          update: {}
         });
 
-        totalCreated++;
-        log.info(
-          `  ✔ Month ${m} for ${mortgage.loanNo} — ` +
-          `Instalment Date: ${instCreationDate.toDateString()}, ` +
-          `Due Date: ${instDueDate.toDateString()}`
-        );
+        // Only count as "created" if it was a genuine new record
+        if (result.paidAmount.toString() === "0" && result.status === "UNPAID") {
+          totalCreated++;
+          log.info(
+            `  ✔ Month ${m} for ${mortgage.loanNo} — ` +
+            `Instalment Date: ${instCreationDate.toDateString()}, ` +
+            `Due Date: ${instDueDate.toDateString()}`
+          );
+        } else {
+          log.info(`  ⚡ Month ${m} for ${mortgage.loanNo} already exists — skipped.`);
+        }
       }
     }
 

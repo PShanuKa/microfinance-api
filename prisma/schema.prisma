@@ -477,6 +477,9 @@ model MortgageInstalment {
   status           PaymentStatus @default(UNPAID)
   paidAt           DateTime?
 
+  penaltyAmount        Decimal   @default(0.00) @db.Decimal(10, 2) // accumulated penalty total
+  lastPenaltyAppliedAt DateTime? @db.Date                           // last date penalty was calculated
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
