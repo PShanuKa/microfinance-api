@@ -18,7 +18,7 @@ COPY . .
 RUN npx prisma generate
 
 # Expose the API port
-EXPOSE 8000
+EXPOSE 4000
 
 # Start the Fastify server
 CMD ["npm", "start"]
