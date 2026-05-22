@@ -16,11 +16,12 @@ export default async function auditRoutes(fastify, opts) {
           entityId: { type: "string" },
           action: { type: "string" },
           userId: { type: "string" },
+          search: { type: "string" },
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, entity, entityId, action, userId } = request.query;
+      const { page, limit, entity, entityId, action, userId, search } = request.query;
       const skip = (page - 1) * limit;
 
       const where = {
@@ -29,6 +30,13 @@ export default async function auditRoutes(fastify, opts) {
           entityId ? { entityId } : {},
           action ? { action } : {},
           userId ? { userId } : {},
+          search ? {
+            OR: [
+              { entityId: { contains: search } },
+              { action: { contains: search } },
+              { entity: { contains: search } },
+            ]
+          } : {}
         ],
       };
 
