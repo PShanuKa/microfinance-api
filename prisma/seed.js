@@ -15,7 +15,7 @@ async function main() {
     branch = await prisma.branch.create({
       data: {
         name: 'Arunodayata Saviyak',
-        address: 'No 45, Arunodayata Saviyak, Balangoda, Sri Lanka'
+        address: 'No 45, Arunodayata Saviyak,  Sri Lanka'
       }
     });
     console.log(`🏢 Created Branch: ${branch.name}`);
