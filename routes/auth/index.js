@@ -4,10 +4,11 @@ import { generateTokens } from "../../utils/tokens.js";
 import { createBadRequestError, createUnauthorizedError } from "../../utils/errors.js";
 
 export default async function authRoutes(fastify, opts) {
-   fastify.addHook("preHandler", fastify.authenticate);
+  
 
   // PUBLIC ROUTE — no auth required (user registration)
   fastify.post("/register", {
+    preHandler: fastify.authenticate,
     preHandler: fastify.authorize(["ADMIN"]),
     schema: {
       body: {
