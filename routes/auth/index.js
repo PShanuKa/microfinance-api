@@ -6,10 +6,9 @@ import { createBadRequestError, createUnauthorizedError } from "../../utils/erro
 export default async function authRoutes(fastify, opts) {
   
 
-  // PUBLIC ROUTE — no auth required (user registration)
+
   fastify.post("/register", {
-    preHandler: fastify.authenticate,
-    preHandler: fastify.authorize(["ADMIN"]),
+    preHandler: [fastify.authenticate, fastify.authorize(["ADMIN"])],
     schema: {
       body: {
         type: "object",
