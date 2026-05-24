@@ -1,5 +1,8 @@
 // routes/mortgage-loans/index.js
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
+import fs from "fs";
+import path from "path";
+import { numberToWords } from "../../utils/numberToWords.js";
 
 export default async function mortgageLoanRoutes(fastify, opts) {
   // Enforce JWT authentication on all routes in this plugin
@@ -320,6 +323,53 @@ export default async function mortgageLoanRoutes(fastify, opts) {
       success: true,
       collection
     };
+  });
+
+  // GET /api/mortgage-loans/:id/voucher - Generate Payment Voucher HTML
+  fastify.get("/:id/voucher", async (request, reply) => {
+    const { id } = request.params;
+    const mortgage = await fastify.prisma.mortgageLoan.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        branch: { select: { name: true } }
+      }
+    });
+
+    if (!mortgage) {
+      throw createNotFoundError("Mortgage loan not found");
+    }
+
+    // Prepare data
+    const templatePath = path.join(process.cwd(), "templates", "receipts", "mortgage-disbursement-voucher.html");
+    let templateHtml = fs.readFileSync(templatePath, "utf-8");
+
+    const amount = Number(mortgage.netCashDisbursed);
+    const amountFormatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const amountWords = numberToWords(amount);
+    
+    // Default placeholders
+    const placeholders = {
+      "{{companyName}}": "A. A. L. G. B. G.",
+      "{{branchName}}": mortgage.branch?.name || "Main Branch",
+      "{{payeeName}}": mortgage.client?.fullname || "Unknown",
+      "{{idNumber}}": mortgage.client?.nic || "Unknown",
+      "{{voucherNo}}": mortgage.loanNo,
+      "{{date}}": mortgage.approvedAt ? new Date(mortgage.approvedAt).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB'),
+      "{{invNo}}": "-",
+      "{{description}}": "Mortgage Loan Disbursement",
+      "{{amountFormatted}}": amountFormatted,
+      "{{ledgerAccount}}": "Loan Account",
+      "{{remarks}}": "-",
+      "{{amountWords}}": amountWords,
+    };
+
+    for (const [key, value] of Object.entries(placeholders)) {
+      // Use regex with global flag to replace all occurrences
+      templateHtml = templateHtml.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), value);
+    }
+
+    reply.type('text/html').send(templateHtml);
   });
 
   // GET /api/mortgage-loans/:id - Fetch single record details

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Voucher - {{voucherNo}}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      color: #000;
+      background: #fff;
+    }
+    .voucher-container {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      border: 1px solid #000;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      text-decoration: underline;
+      letter-spacing: 2px;
+    }
+    .top-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .info-left p, .info-right p {
+      margin: 5px 0;
+    }
+    .info-row {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 5px;
+    }
+    .info-label {
+      width: 80px;
+      font-weight: bold;
+    }
+    .info-value {
+      border-bottom: 1px dotted #000;
+      flex: 1;
+      min-width: 150px;
+      padding-left: 5px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      font-weight: bold;
+      text-align: center;
+    }
+    .text-right {
+      text-align: right;
+    }
+    
+    .amount-words-row {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    .amount-words-label {
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    .amount-words-value {
+      border-bottom: 1px dotted #000;
+      flex: 1;
+      padding-left: 5px;
+      font-weight: bold;
+    }
+    
+    .cheque-info {
+      display: flex;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .cheque-info div {
+      flex: 1;
+      display: flex;
+      align-items: baseline;
+    }
+    .cheque-info label {
+      margin-right: 5px;
+    }
+    .cheque-info span {
+      border-bottom: 1px dotted #000;
+      flex: 1;
+      padding: 0 5px;
+    }
+
+    .signatures-1 {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 40px;
+      font-size: 14px;
+      text-align: center;
+    }
+    .signatures-1 div {
+      width: 18%;
+      border-top: 1px solid #000;
+      padding-top: 5px;
+    }
+
+    .acknowledgement {
+      margin-bottom: 30px;
+      font-size: 14px;
+      line-height: 2;
+    }
+    .ack-line {
+      border-bottom: 1px dotted #000;
+      display: inline-block;
+      min-width: 150px;
+    }
+
+    .signatures-2 {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+    }
+    .sig-field {
+      display: flex;
+      align-items: baseline;
+      width: 23%;
+    }
+    .sig-field label {
+      margin-right: 5px;
+    }
+    .sig-field span {
+      border-bottom: 1px dotted #000;
+      flex: 1;
+    }
+
+    @media print {
+      body {
+        padding: 0;
+      }
+      .voucher-container {
+        border: none;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      @page {
+        margin: 1cm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="voucher-container">
+    <div class="header">
+      <h1>PAYMENT VOUCHER</h1>
+    </div>
+
+    <div class="top-info">
+      <div class="info-left">
+        <div class="info-row">
+          <div class="info-label">M/s.</div>
+          <div class="info-value">{{companyName}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Branch:</div>
+          <div class="info-value">{{branchName}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Payee</div>
+          <div class="info-value">{{payeeName}}</div>
+        </div>
+      </div>
+      <div class="info-right">
+        <div class="info-row">
+          <div class="info-label">Voucher No:</div>
+          <div class="info-value">{{voucherNo}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Date:</div>
+          <div class="info-value">{{date}}</div>
+        </div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th width="15%">Inv. No.</th>
+          <th width="15%">Inv. Date</th>
+          <th width="35%">Item Description</th>
+          <th width="15%">Amount</th>
+          <th width="20%">Ledger Account</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{invNo}}</td>
+          <td>{{date}}</td>
+          <td>{{description}}</td>
+          <td class="text-right">{{amountFormatted}}</td>
+          <td>{{ledgerAccount}}</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="text-right" style="font-weight: bold; border-right: 1px solid #000;">Remarks: {{remarks}}</td>
+          <td class="text-right" style="font-weight: bold; border-top: 2px solid #000; border-bottom: 4px double #000;">{{amountFormatted}}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="amount-words-row">
+      <div class="amount-words-label">Amount in words</div>
+      <div class="amount-words-value">Rupees {{amountWords}}</div>
+    </div>
+
+    <div class="cheque-info">
+      <div>
+        <label>Bank:</label>
+        <span></span>
+      </div>
+      <div>
+        <label>Cheque No:</label>
+        <span></span>
+      </div>
+      <div>
+        <label>Cheque Date:</label>
+        <span></span>
+      </div>
+    </div>
+
+    <div class="signatures-1">
+      <div>Prepared By</div>
+      <div>Asst. Manager</div>
+      <div>Branch Manager</div>
+      <div>Accountant</div>
+      <div>Director</div>
+    </div>
+
+    <div class="acknowledgement">
+      I acknowledge receipt of the cheque No. <span class="ack-line"></span> for Rupees <span class="ack-line"></span>
+    </div>
+
+    <div class="signatures-2">
+      <div class="sig-field">
+        <label>Name:</label>
+        <span>{{payeeName}}</span>
+      </div>
+      <div class="sig-field">
+        <label>I.D. Number:</label>
+        <span>{{idNumber}}</span>
+      </div>
+      <div class="sig-field">
+        <label>Date:</label>
+        <span>{{date}}</span>
+      </div>
+      <div class="sig-field">
+        <label>Signature:</label>
+        <span></span>
+      </div>
+    </div>
+  </div>
+  <script>
+    window.onload = function() {
+      window.print();
+    }
+  </script>
+</body>
+</html>
