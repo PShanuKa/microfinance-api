@@ -252,7 +252,7 @@ export default async function loanRoutes(fastify, opts) {
           data.totalWeeks,
           data.leaderWeeklyAmount,
           data.memberWeeklyAmount,
-          new Date()
+          addDays(new Date(), 7)
         );
 
         await tx.instalment.createMany({ data: instalments });
@@ -654,7 +654,7 @@ export default async function loanRoutes(fastify, opts) {
           where: { loanId: id }
         });
 
-        // 3. Generate new instalments starting with baseDate = today
+        // 3. Generate new instalments starting with baseDate = next week (add 7 days)
         const instalments = await generateInstalments(
           tx,
           existingLoan,
@@ -662,7 +662,7 @@ export default async function loanRoutes(fastify, opts) {
           existingLoan.totalWeeks,
           existingLoan.leaderWeeklyAmount,
           existingLoan.memberWeeklyAmount,
-          new Date()
+          addDays(new Date(), 7)
         );
 
         // 4. Insert rescheduled instalments
