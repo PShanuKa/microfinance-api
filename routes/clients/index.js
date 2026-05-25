@@ -132,6 +132,13 @@ export default async function clientRoutes(fastify, opts) {
       });
 
       if (existingClient) {
+        if (existingClient.isDeleted) {
+          throw createBadRequestError("Validation error", { 
+            nic: "A deactivated account with this NIC already exists.",
+            isDeleted: true,
+            clientId: existingClient.id
+          });
+        }
         throw createBadRequestError("Validation error", { nic: "Client with this NIC already exists" });
       }
 
@@ -392,6 +399,51 @@ export default async function clientRoutes(fastify, opts) {
       });
 
       return { success: true, message: "Client deleted successfully" };
+    },
+  });
+
+  // Restore Client
+  fastify.put("/:id/restore", {
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } },
+      },
+    },
+    preHandler: fastify.authorize(["ADMIN", "BRANCH_MANAGER", "LOAN_OFFICER"]),
+    handler: async (request, reply) => {
+      const { id } = request.params;
+
+      const client = await fastify.prisma.client.findUnique({
+        where: { id },
+      });
+
+      if (!client) throw createNotFoundError("Client not found");
+
+      await fastify.prisma.client.update({
+        where: { id },
+        data: { 
+          isDeleted: false,
+          updatedBy: request.user.id
+        }
+      });
+
+      // Audit Log
+      await fastify.prisma.auditLog.create({
+        data: {
+          action: "RESTORE",
+          entity: "CLIENT",
+          entityId: client.id,
+          userId: request.user.id,
+          details: {
+            message: `Restored client ${client.fullname} (${client.clientNo})`,
+            after: client
+          }
+        }
+      });
+
+      return { success: true, message: "Client restored successfully" };
     },
   });
 }
