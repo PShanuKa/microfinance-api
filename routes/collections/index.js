@@ -282,7 +282,7 @@ export default async function collectionRoutes(fastify, opts) {
 
     // Role check directly from JWT payload
     const allowedRoles = ["ADMIN", "BRANCH_MANAGER", "APPROVER", "APPROVED"];
-    if (!allowedRoles.includes(request.user.role)) {
+    if (!(request.user.roles || []).some(role => allowedRoles.includes(role))) {
       throw createBadRequestError("You do not have permission to approve collections.");
     }
 
@@ -483,7 +483,7 @@ export default async function collectionRoutes(fastify, opts) {
 
     // Role check directly from JWT payload
     const allowedRoles = ["ADMIN", "BRANCH_MANAGER", "APPROVER", "APPROVED"];
-    if (!allowedRoles.includes(request.user.role)) {
+    if (!(request.user.roles || []).some(role => allowedRoles.includes(role))) {
       throw createBadRequestError("You do not have permission to reject collections.");
     }
 

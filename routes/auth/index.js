@@ -12,14 +12,15 @@ export default async function authRoutes(fastify, opts) {
     schema: {
       body: {
         type: "object",
-        required: ["fullname", "email", "password", "role"],
+        required: ["fullname", "email", "password", "roles"],
         properties: {
           fullname: { type: "string", minLength: 3 },
           email: { type: "string", format: "email" },
           password: { type: "string", minLength: 6 },
-          role: { 
-            type: "string", 
-            enum: ["ADMIN", "BRANCH_MANAGER", "LOAN_OFFICER", "COLLECTION_OFFICER", "APPROVER", "AUDITOR"] 
+          roles: { 
+            type: "array", 
+            items: { type: "string" },
+            minItems: 1
           },
           branchId: { type: "string" },
         },
@@ -28,19 +29,19 @@ export default async function authRoutes(fastify, opts) {
             fullname: "Full name is required",
             email: "Email is required",
             password: "Password is required",
-            role: "Role is required"
+            roles: "At least one role is required"
           },
           properties: {
             email: "Invalid email format",
             password: "Password must be at least 6 characters",
             fullname: "Full name must be at least 3 characters",
-            role: "Invalid role selected"
+            roles: "Roles must be an array of valid strings"
           }
         }
       },
     },
     handler: async (request, reply) => {
-      const { fullname, email, password, role, branchId } = request.body;
+      const { fullname, email, password, roles, branchId } = request.body;
 
       const existingUser = await fastify.prisma.user.findUnique({
         where: { email },
@@ -57,7 +58,7 @@ export default async function authRoutes(fastify, opts) {
           fullname,
           email,
           password: hashedPassword,
-          role,
+          roles,
           branchId: branchId || null,
         },
       });
@@ -79,7 +80,7 @@ export default async function authRoutes(fastify, opts) {
           id: user.id,
           fullname: user.fullname,
           email: user.email,
-          role: user.role,
+          roles: user.roles,
         },
         ...tokens,
       };
@@ -144,7 +145,7 @@ export default async function authRoutes(fastify, opts) {
           id: user.id,
           fullname: user.fullname,
           email: user.email,
-          role: user.role,
+          roles: user.roles,
         },
         ...tokens,
       };
@@ -191,7 +192,7 @@ export default async function authRoutes(fastify, opts) {
         id: true,
         fullname: true,
         email: true,
-        role: true,
+        roles: true,
         status: true,
         branchId: true,
         branch: true,

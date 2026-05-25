@@ -28,9 +28,10 @@ async function jwtPlugin(fastify, options) {
         throw createUnauthorizedError();
       }
 
-      // 2. Check if the user's role is allowed
-      const userRole = request.user.role;
-      if (!allowedRoles.includes(userRole)) {
+      // 2. Check if the user has any of the allowed roles
+      const userRoles = request.user.roles || [];
+      const hasAccess = userRoles.some(role => allowedRoles.includes(role));
+      if (!hasAccess) {
         throw createForbiddenError("Forbidden: You do not have permission to access this resource");
       }
     };

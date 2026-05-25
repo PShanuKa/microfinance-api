@@ -35,7 +35,7 @@ async function main() {
         fullname: 'System Administrator',
         email: 'admin@gmail.com',
         password: hashedPassword,
-        role: 'ADMIN',
+        roles: ['ADMIN'],
         status: true,
         branchId: branch.id
       }

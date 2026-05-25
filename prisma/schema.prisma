@@ -15,7 +15,7 @@ model User {
   fullname  String
   email     String   @unique
   password  String
-  role      Role     @default(LOAN_OFFICER)
+  roles     Json     @default("[\"LOAN_OFFICER\"]")
   status    Boolean  @default(true)
   branchId  String?
   branch    Branch?  @relation("BranchUsers", fields: [branchId], references: [id])
@@ -207,6 +207,8 @@ enum Role {
   COLLECTION_OFFICER
   APPROVER
   AUDITOR
+  MORTGAGE_OFFICER
+  MORTGAGE_COLLECTION
 }
 
 enum ClientStatus {

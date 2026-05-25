@@ -131,7 +131,7 @@ export default async function groupRoutes(fastify, opts) {
 
       // Check if user is a BRANCH_MANAGER or LOAN_OFFICER
       const restrictedRoles = ["BRANCH_MANAGER", "LOAN_OFFICER"];
-      if (restrictedRoles.includes(requestingUser.role)) {
+      if ((requestingUser.roles || []).some(role => restrictedRoles.includes(role))) {
         if (!requestingUser.branchId) {
           throw createBadRequestError("Validation error", { branchId: "You do not have an assigned branch. Group creation is restricted." });
         }

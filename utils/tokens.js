@@ -4,7 +4,7 @@ export const generateTokens = (user) => {
   const payload = {
     id: user.id,
     email: user.email,
-    role: user.role,
+    roles: user.roles || ["LOAN_OFFICER"],
   };
 
   const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
