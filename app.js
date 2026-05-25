@@ -40,6 +40,7 @@ export async function buildApp(opts = {}) {
   }
 
   const fastify = Fastify({
+    bodyLimit: 50 * 1024 * 1024, // 50MB
     logger: {
       level: "info",
       transport: {
@@ -75,7 +76,11 @@ export async function buildApp(opts = {}) {
   await fastify.register(swaggerPlugin);
   await fastify.register(prismaPlugin);
   await fastify.register(schedulerPlugin);
-  await fastify.register(fastifyMultipart);
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: 50 * 1024 * 1024, // 50MB
+    }
+  });
 
   // Register global error handler
   globalErrorHandler(fastify);
