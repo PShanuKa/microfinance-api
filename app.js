@@ -29,6 +29,7 @@ import attachmentRoutes from "./routes/attachments/index.js";
 import auditRoutes from "./routes/audit/index.js";
 import branchRoutes from "./routes/branches/index.js";
 import dashboardRoutes from "./routes/dashboard/index.js";
+import mortgageDashboardRoutes from "./routes/mortgage-dashboard/index.js";
 import fastifyMultipart from "@fastify/multipart";
 import schedulerPlugin from "./plugins/scheduler.js";
 
@@ -99,6 +100,7 @@ export async function buildApp(opts = {}) {
   await fastify.register(auditRoutes, { prefix: "/api/audit" });
   await fastify.register(branchRoutes, { prefix: "/api/branches" });
   await fastify.register(dashboardRoutes, { prefix: "/api/dashboard" });
+  await fastify.register(mortgageDashboardRoutes, { prefix: "/api/mortgage-dashboard" });
 
   // PUBLIC ROUTE — no auth required (health check)
   fastify.get("/api/health", async (request, reply) => {
