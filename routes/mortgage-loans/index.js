@@ -925,6 +925,53 @@ export default async function mortgageLoanRoutes(fastify, opts) {
     }
   });
 
+  // POST /api/mortgage-loans/:id/complete - Mark Mortgage Loan as COMPLETED
+  fastify.post("/:id/complete", {
+    handler: async (request, reply) => {
+      const { id } = request.params;
+      const mortgage = await fastify.prisma.mortgageLoan.findUnique({
+        where: { id },
+      });
+
+      if (!mortgage) throw createNotFoundError("Mortgage Loan not found");
+
+      if (mortgage.status === "COMPLETED") {
+        throw createBadRequestError("Mortgage Loan is already completed");
+      }
+
+      // Allow completion if remaining principal is zero
+      const remainingPrincipal = Math.max(0, Number(mortgage.lentAmount) - Number(mortgage.principalPaid || 0));
+      if (remainingPrincipal > 0) {
+        throw createBadRequestError("Cannot complete mortgage loan with outstanding principal balance");
+      }
+
+      const updated = await fastify.prisma.$transaction(async (tx) => {
+        const ml = await tx.mortgageLoan.update({
+          where: { id },
+          data: { status: "COMPLETED" },
+        });
+        
+        await tx.auditLog.create({
+          data: {
+            action: "MORTGAGE_LOAN_COMPLETED",
+            entity: "MORTGAGE_LOAN",
+            entityId: id,
+            userId: request.user.id,
+            details: { loanNo: mortgage.loanNo },
+          },
+        });
+        
+        return ml;
+      });
+
+      return {
+        success: true,
+        message: "Mortgage Loan successfully marked as COMPLETED",
+        mortgage: updated,
+      };
+    },
+  });
+
   // Export Mortgage Loan to PDF
   fastify.get("/:id/export/pdf", async (request, reply) => {
     const { id } = request.params;
