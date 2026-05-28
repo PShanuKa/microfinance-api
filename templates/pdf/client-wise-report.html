@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; font-size: 8px; color: #000; margin: 0; padding: 0; }
+    h2 { font-size: 11px; margin-bottom: 5px; text-align: center; }
+    .filters { font-size: 8px; margin-bottom: 10px; text-align: center; color: #333; }
+    
+    .summary-box {
+      border: 1px solid #000;
+      padding: 5px;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-around;
+      background-color: #f9f9f9;
+    }
+    .summary-item {
+      text-align: center;
+    }
+    .summary-label { font-weight: bold; margin-bottom: 2px; }
+    .summary-value { font-size: 10px; }
+    
+    table { width: 100%; border-collapse: collapse; font-size: 7.5px; }
+    th, td { border: 1px solid #000; padding: 4px; text-align: left; }
+    th { font-weight: bold; background-color: #f0f0f0; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>Client Wise Report</h2>
+  
+  <div class="filters">
+    Date Range: {{dateRange}} | Payment Status: {{paymentStatus}} | Search: {{search}}
+  </div>
+  
+  <div class="summary-box">
+    <div class="summary-item">
+      <div class="summary-label">Total Outstanding</div>
+      <div class="summary-value">Rs. {{summary.totalOutstanding}}</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Total Arrears</div>
+      <div class="summary-value">Rs. {{summary.totalArrears}}</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Total Paid</div>
+      <div class="summary-value">Rs. {{summary.totalPaid}}</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Total Expected</div>
+      <div class="summary-value">Rs. {{summary.totalExpected}}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>Client Name</th>
+        <th>NIC</th>
+        <th>Group</th>
+        <th class="text-right">Expected</th>
+        <th class="text-right">Collected</th>
+        <th class="text-right">Arrears</th>
+        <th class="text-right">Total O/S</th>
+        <th class="text-center">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each records}}
+      <tr>
+        <td>{{this.clientNo}}</td>
+        <td>{{this.fullname}}</td>
+        <td>{{this.nic}}</td>
+        <td>{{this.groupName}}</td>
+        <td class="text-right">{{this.expected}}</td>
+        <td class="text-right">{{this.collected}}</td>
+        <td class="text-right">{{this.arrears}}</td>
+        <td class="text-right">{{this.totalOutstanding}}</td>
+        <td class="text-center">{{this.status}}</td>
+      </tr>
+      {{/each}}
+      {{#unless records.length}}
+      <tr>
+        <td colspan="9" class="text-center">No data available for the selected filters</td>
+      </tr>
+      {{/unless}}
+    </tbody>
+  </table>
+
+</body>
+</html>

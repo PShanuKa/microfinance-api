@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import createError from "http-errors";
+import { generateLoanPdf } from "../../services/pdfGenerator.js";
 
 const prisma = new PrismaClient();
 
@@ -207,6 +208,170 @@ export default async function reportRoutes(fastify, options) {
           totalPages: Math.ceil(totalItems / limit),
         },
       });
+    }
+  );
+
+  fastify.get(
+    "/client-wise/export/pdf",
+    {
+      preValidation: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const { startDate, endDate, search, paymentStatus } = request.query;
+
+      const dateFilter = {};
+      if (startDate && endDate) {
+        dateFilter.gte = new Date(`${startDate}T00:00:00.000Z`);
+        dateFilter.lte = new Date(`${endDate}T23:59:59.999Z`);
+      }
+
+      const clientWhere = {
+        isDeleted: false,
+        instalments: {
+          some: { loan: { status: { in: ["ACTIVE", "APPROVED"] } } },
+        },
+      };
+
+      if (search) {
+        clientWhere.OR = [
+          { fullname: { contains: search } },
+          { nic: { contains: search } },
+          { clientNo: { contains: search } },
+        ];
+      }
+
+      const clients = await prisma.client.findMany({
+        where: clientWhere,
+        include: {
+          groupMembers: { include: { group: true } },
+          instalments: {
+            where: { loan: { status: { in: ["ACTIVE", "APPROVED"] } } },
+            include: {
+              collectionItems: { include: { collection: true } }
+            }
+          }
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      let globalTotalPaid = 0;
+      let globalTotalOutstanding = 0;
+      let globalTotalArrears = 0;
+      let globalTotalExpected = 0;
+
+      const reportData = clients.map((client) => {
+        let clientExpected = 0;
+        let clientCollected = 0;
+        let clientArrears = 0;
+        let clientTotalOutstanding = 0;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        client.instalments.forEach((inst) => {
+          const instDueDate = new Date(inst.dueDate);
+          instDueDate.setHours(0, 0, 0, 0);
+
+          if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            if (instDueDate >= start && instDueDate <= end) clientExpected += Number(inst.dueAmount);
+          } else {
+            clientExpected += Number(inst.dueAmount);
+          }
+
+          inst.collectionItems.forEach((item) => {
+            if (item.status !== "REJECTED") {
+              if (startDate && endDate) {
+                const colDate = new Date(item.collection.date);
+                colDate.setHours(0, 0, 0, 0);
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                if (colDate >= start && colDate <= end) clientCollected += Number(item.amount);
+              } else {
+                clientCollected += Number(item.amount);
+              }
+            }
+          });
+
+          if (instDueDate < today && inst.remainingDue > 0) clientArrears += Number(inst.remainingDue);
+
+          if (inst.remainingDue > 0) {
+            if (endDate) {
+              const end = new Date(endDate);
+              end.setHours(23, 59, 59, 999);
+              if (instDueDate <= end) clientTotalOutstanding += Number(inst.remainingDue);
+            } else {
+              clientTotalOutstanding += Number(inst.remainingDue);
+            }
+          }
+        });
+
+        let status = "PENDING";
+        if (clientExpected > 0) {
+          if (clientCollected >= clientExpected) status = "PAID";
+          else if (clientCollected > 0) status = "PARTIAL";
+          else status = "UNPAID";
+        } else if (clientCollected > 0) {
+           status = "PAID";
+        } else if (clientArrears > 0) {
+           status = "UNPAID";
+        }
+
+        const group = client.groupMembers[0]?.group;
+
+        return {
+          clientNo: client.clientNo,
+          fullname: client.fullname,
+          nic: client.nic,
+          groupName: group?.name || "-",
+          expected: clientExpected,
+          collected: clientCollected,
+          arrears: clientArrears,
+          totalOutstanding: clientTotalOutstanding,
+          status,
+        };
+      });
+
+      let filteredData = reportData;
+      if (paymentStatus === "PAID") {
+        filteredData = reportData.filter((d) => d.status === "PAID");
+      } else if (paymentStatus === "UNPAID") {
+        filteredData = reportData.filter((d) => d.status === "UNPAID" || d.status === "PARTIAL");
+      }
+
+      // Calculate totals for the filtered subset
+      filteredData.forEach(d => {
+        globalTotalPaid += d.collected;
+        globalTotalOutstanding += d.totalOutstanding;
+        globalTotalArrears += d.arrears;
+        globalTotalExpected += d.expected;
+      });
+
+      const pdfData = {
+        dateRange: (startDate && endDate) ? `${startDate} to ${endDate}` : "All Time",
+        paymentStatus: paymentStatus || "All",
+        search: search || "None",
+        summary: {
+          totalOutstanding: globalTotalOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          totalArrears: globalTotalArrears.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          totalPaid: globalTotalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          totalExpected: globalTotalExpected.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+        },
+        records: filteredData.map(d => ({
+          ...d,
+          expected: d.expected.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          collected: d.collected.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          arrears: d.arrears.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+          totalOutstanding: d.totalOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+        }))
+      };
+
+      const pdfBuffer = await generateLoanPdf(pdfData, "client-wise-report.html");
+
+      reply.header('Content-Type', 'application/pdf');
+      reply.header('Content-Disposition', `attachment; filename="Client-Wise-Report.pdf"`);
+      return reply.send(pdfBuffer);
     }
   );
 }
