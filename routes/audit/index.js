@@ -55,14 +55,14 @@ export default async function auditRoutes(fastify, opts) {
       const userIds = [...new Set(logs.map(log => log.userId))];
       const users = await fastify.prisma.user.findMany({
         where: { id: { in: userIds } },
-        select: { id: true, fullname: true, role: true }
+        select: { id: true, fullname: true, roles: true }
       });
 
       const userMap = Object.fromEntries(users.map(u => [u.id, u]));
 
       const enrichedLogs = logs.map(log => ({
         ...log,
-        user: userMap[log.userId] || { fullname: "Unknown User", role: "N/A" }
+        user: userMap[log.userId] || { fullname: "Unknown User", roles: [] }
       }));
 
       return {
@@ -89,14 +89,14 @@ export default async function auditRoutes(fastify, opts) {
 
     const user = await fastify.prisma.user.findUnique({
       where: { id: log.userId },
-      select: { id: true, fullname: true, role: true }
+      select: { id: true, fullname: true, roles: true }
     });
 
     return { 
       success: true, 
       log: {
         ...log,
-        user: user || { fullname: "Unknown User", role: "N/A" }
+        user: user || { fullname: "Unknown User", roles: [] }
       }
     };
   });
