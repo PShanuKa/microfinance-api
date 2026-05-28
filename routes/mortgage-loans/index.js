@@ -351,10 +351,19 @@ export default async function mortgageLoanRoutes(fastify, opts) {
     const amount = Number(mortgage.netCashDisbursed);
     const amountFormatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const amountWords = numberToWords(amount);
+
+    const logoPath = path.join(process.cwd(), "assets", "don&dons.png");
+    let logoBase64 = "";
+    try {
+      const logoBuffer = fs.readFileSync(logoPath);
+      logoBase64 = `data:image/png;base64,${logoBuffer.toString("base64")}`;
+    } catch (err) {
+      console.warn("Logo not found for voucher", err);
+    }
     
     // Default placeholders
     const placeholders = {
-      "{{companyName}}": "Don & Dons Microfinance",
+      "{{companyName}}": "Don and don's",
       "{{branchName}}": mortgage.branch?.name || "Main Branch",
       "{{payeeName}}": mortgage.client?.fullname || "Unknown",
       "{{idNumber}}": mortgage.client?.nic || "Unknown",
@@ -366,6 +375,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
       "{{ledgerAccount}}": "Loan Account",
       "{{remarks}}": "-",
       "{{amountWords}}": amountWords,
+      "{{logoBase64}}": logoBase64,
     };
 
     for (const [key, value] of Object.entries(placeholders)) {

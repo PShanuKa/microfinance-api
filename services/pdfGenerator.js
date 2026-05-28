@@ -14,13 +14,32 @@ export async function generateLoanPdf(data, templateName = "loan-details.html") 
     const templatesDir = path.resolve("./templates/pdf");
     
     // Load templates
-    const headerHtml = await fs.readFile(path.join(templatesDir, "header.html"), "utf8");
+    const headerHtmlRaw = await fs.readFile(path.join(templatesDir, "header.html"), "utf8");
     const footerHtml = await fs.readFile(path.join(templatesDir, "footer.html"), "utf8");
     const bodyHtmlRaw = await fs.readFile(path.join(templatesDir, templateName), "utf8");
 
-    // Compile Handlebars template with data
+    // Determine logo and company name based on template
+    const isMortgage = templateName === "mortgage-details.html";
+    const logoFileName = isMortgage ? "don&dons.png" : "arunadayata_saviyak.png";
+    const companyName = isMortgage ? "Don and don's" : "Arunadayata Saviyak";
+
+    const logoPath = path.resolve(`./assets/${logoFileName}`);
+    let logoBase64 = "";
+    try {
+      const logoBuffer = await fs.readFile(logoPath);
+      logoBase64 = `data:image/png;base64,${logoBuffer.toString("base64")}`;
+    } catch (err) {
+      console.warn(`Logo ${logoFileName} not found for PDF generation`, err);
+    }
+
+    const templateData = { ...data, logoBase64, companyName };
+
+    // Compile Handlebars templates with data
+    const headerTemplateCompiled = handlebars.compile(headerHtmlRaw);
+    const headerHtml = headerTemplateCompiled(templateData);
+
     const template = handlebars.compile(bodyHtmlRaw);
-    const compiledHtml = template(data);
+    const compiledHtml = template(templateData);
 
     // PDF options
     let options = { 

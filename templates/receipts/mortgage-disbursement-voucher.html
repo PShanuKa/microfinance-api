@@ -236,9 +236,12 @@
 <body>
   <div class="voucher-container">
     <div class="header">
-      <div class="header-left">
-        <h1>{{companyName}}</h1>
-        <p>Branch: {{branchName}}</p>
+      <div class="header-left" style="display: flex; gap: 15px; align-items: center;">
+        <img src="{{logoBase64}}" alt="Logo" style="height: 50px; object-fit: contain;">
+        <div>
+          <h1>{{companyName}}</h1>
+          <p>Branch: {{branchName}}</p>
+        </div>
       </div>
       <div class="header-right">
         <h2>PAYMENT VOUCHER</h2>

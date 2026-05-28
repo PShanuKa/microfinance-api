@@ -1,4 +1,9 @@
-<div style="font-size: 10px; width: 100%; text-align: center; font-family: sans-serif; border-bottom: 1px solid #333; padding-bottom: 5px; margin-left: 20px; margin-right: 20px;">
-  <strong style="font-size: 12px;">Don and Dons Microfinance</strong><br>
-  Loan Details Report
+<div style="font-size: 10px; width: 100%; text-align: center; font-family: sans-serif; border-bottom: 1px solid #333; padding-bottom: 5px; margin-left: 20px; margin-right: 20px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 5px;">
+  {{#if logoBase64}}
+    <img src="{{logoBase64}}" alt="Logo" style="height: 50px; object-fit: contain;">
+  {{/if}}
+  <div>
+    <strong style="font-size: 12px;">{{companyName}}</strong><br>
+    Loan Details Report
+  </div>
 </div>
