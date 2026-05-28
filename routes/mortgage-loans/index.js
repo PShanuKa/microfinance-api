@@ -83,6 +83,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         ],
         properties: {
           clientId: { type: "string" },
+          branchId: { type: "string" },
           lentAmount: { type: "number", minimum: 1 },
           interestRate: { type: "number", minimum: 0 },
           assetType: { type: "string", enum: ["VEHICLE", "PROPERTY", "GOLD", "OTHER"] },
@@ -129,6 +130,8 @@ export default async function mortgageLoanRoutes(fastify, opts) {
       if (!creator) {
         throw createNotFoundError("Creator user not found");
       }
+      
+      const targetBranchId = creator.branchId || data.branchId || null;
 
       // 2. Fetch Client to verify existence and check if blacklisted
       const client = await fastify.prisma.client.findUnique({
@@ -170,7 +173,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         const newMortgage = await tx.mortgageLoan.create({
           data: {
             loanNo,
-            clientId: data.clientId,
+            client: { connect: { id: data.clientId } },
             lentAmount: data.lentAmount,
             interestRate: data.interestRate,
             upfrontInterest,
@@ -183,8 +186,8 @@ export default async function mortgageLoanRoutes(fastify, opts) {
             estimatedMarketValue: data.estimatedMarketValue,
             assessedValue: data.assessedValue,
             status: "DRAFT",
-            createdById: creatorId,
-            branchId: creator.branchId || null,
+            createdBy: { connect: { id: creatorId } },
+            ...(targetBranchId ? { branch: { connect: { id: targetBranchId } } } : {}),
           }
         });
 
