@@ -3,6 +3,7 @@ import { createBadRequestError, createNotFoundError } from "../../utils/errors.j
 import fs from "fs";
 import path from "path";
 import { numberToWords } from "../../utils/numberToWords.js";
+import { generateLoanPdf } from "../../services/pdfGenerator.js";
 
 export default async function mortgageLoanRoutes(fastify, opts) {
   // Enforce JWT authentication on all routes in this plugin
@@ -922,6 +923,66 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         ...result
       };
     }
+  });
+
+  // Export Mortgage Loan to PDF
+  fastify.get("/:id/export/pdf", async (request, reply) => {
+    const { id } = request.params;
+    
+    // Fetch full mortgage details
+    const mortgage = await fastify.prisma.mortgageLoan.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        branch: true,
+        createdBy: { select: { fullname: true } },
+        collections: {
+          include: {
+            collectedBy: { select: { fullname: true } }
+          },
+          orderBy: { createdAt: "desc" }
+        }
+      }
+    });
+
+    if (!mortgage) throw createNotFoundError("Mortgage Loan not found");
+
+    const flatCollections = mortgage.collections.map(c => ({
+      date: new Date(c.createdAt).toLocaleDateString(),
+      receiptNo: c.id.substring(0, 8).toUpperCase(),
+      type: "Mortgage",
+      amount: c.amount,
+      penalty: 0, // Simplified for PDF overview
+      status: "COMPLETED"
+    }));
+
+    const pdfData = {
+      loan: {
+        loanNo: mortgage.loanNo,
+        status: mortgage.status,
+        lentAmount: mortgage.lentAmount,
+        netCashDisbursed: mortgage.netCashDisbursed,
+        assetType: mortgage.assetType,
+        estimatedMarketValue: mortgage.estimatedMarketValue,
+        assessedValue: mortgage.assessedValue,
+        ltvRatio: mortgage.ltvRatio,
+        monthlyDueAmount: mortgage.monthlyDueAmount,
+        createdAt: new Date(mortgage.createdAt).toLocaleDateString()
+      },
+      client: {
+        fullname: mortgage.client.fullname,
+        nic: mortgage.client.nic,
+        phone: mortgage.client.phone,
+        address: mortgage.client.address || "-"
+      },
+      collections: flatCollections
+    };
+
+    const pdfBuffer = await generateLoanPdf(pdfData, "mortgage-details.html");
+
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', `attachment; filename="mortgage-${mortgage.loanNo}.pdf"`);
+    return reply.send(pdfBuffer);
   });
 }
 

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; font-size: 8px; color: #000; margin: 0; padding: 0; }
+    h2 { font-size: 11px; margin-bottom: 5px; }
+    h3 { font-size: 9px; margin-top: 10px; margin-bottom: 5px; text-decoration: underline; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.5px; }
+    th, td { border: 1px solid #000; padding: 3px; text-align: left; }
+    th { font-weight: bold; background-color: #f0f0f0; }
+    .flex { display: flex; justify-content: space-between; }
+    .section { border: 1px solid #000; padding: 5px; margin-bottom: 8px; width: 48%; }
+    .row { margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <h2>Loan Details: {{loan.loanNo}}</h2>
+  
+  <div class="flex">
+    <div class="section">
+      <h3>Client Information</h3>
+      <div class="row"><strong>Name:</strong> {{client.fullname}}</div>
+      <div class="row"><strong>NIC:</strong> {{client.nic}}</div>
+      <div class="row"><strong>Phone:</strong> {{client.phone}}</div>
+      <div class="row"><strong>Address:</strong> {{client.address}}</div>
+    </div>
+    <div class="section">
+      <h3>Loan Summary</h3>
+      <div class="row"><strong>Status:</strong> {{loan.status}}</div>
+      <div class="row"><strong>Lent Amount:</strong> Rs. {{loan.lentAmount}}</div>
+      <div class="row"><strong>Total Payable:</strong> Rs. {{loan.totalPayableAmount}}</div>
+      <div class="row"><strong>Total Paid:</strong> Rs. {{loan.totalPaidAmount}}</div>
+      <div class="row"><strong>Remaining Due:</strong> Rs. {{loan.remainingDue}}</div>
+      <div class="row"><strong>Created At:</strong> {{loan.createdAt}}</div>
+    </div>
+  </div>
+
+  {{#if members.length}}
+  <h3>Group Members</h3>
+  <table>
+    <tr>
+      <th>Role</th>
+      <th>Name</th>
+      <th>NIC</th>
+      <th>Phone</th>
+    </tr>
+    {{#each members}}
+    <tr>
+      <td>{{this.role}}</td>
+      <td>{{this.fullname}}</td>
+      <td>{{this.nic}}</td>
+      <td>{{this.phone}}</td>
+    </tr>
+    {{/each}}
+  </table>
+  {{/if}}
+
+  <h3>Instalments</h3>
+  <table>
+    <tr>
+      <th>#</th>
+      <th>Member</th>
+      <th>Due Date</th>
+      <th>Due Amount</th>
+      <th>Paid Amount</th>
+      <th>Remaining</th>
+      <th>Status</th>
+    </tr>
+    {{#each instalments}}
+    <tr>
+      <td>{{this.number}}</td>
+      <td>{{this.memberName}}</td>
+      <td>{{this.dueDate}}</td>
+      <td>{{this.dueAmount}}</td>
+      <td>{{this.paidAmount}}</td>
+      <td>{{this.remainingDue}}</td>
+      <td>{{this.status}}</td>
+    </tr>
+    {{/each}}
+  </table>
+
+  <h3>Collections</h3>
+  <table>
+    <tr>
+      <th>Date</th>
+      <th>Receipt No</th>
+      <th>Amount</th>
+      <th>Collected By</th>
+      <th>Status</th>
+    </tr>
+    {{#each collections}}
+    <tr>
+      <td>{{this.date}}</td>
+      <td>{{this.receiptNo}}</td>
+      <td>{{this.amount}}</td>
+      <td>{{this.collectedBy}}</td>
+      <td>{{this.status}}</td>
+    </tr>
+    {{/each}}
+  </table>
+
+</body>
+</html>

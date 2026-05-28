@@ -1,6 +1,7 @@
 // routes/loans/index.js
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 import { addDays, nextDay, startOfDay } from "date-fns";
+import { generateLoanPdf } from "../../services/pdfGenerator.js";
 
 export default async function loanRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -604,6 +605,100 @@ export default async function loanRoutes(fastify, opts) {
 
     if (!loan) throw createNotFoundError("Loan not found");
     return { success: true, loan };
+  });
+
+  // Export Loan to PDF
+  fastify.get("/:id/export/pdf", async (request, reply) => {
+    const { id } = request.params;
+    
+    // Fetch full loan details including all nested data
+    const loan = await fastify.prisma.loan.findUnique({
+      where: { id },
+      include: {
+        group: {
+          include: {
+            officer: { select: { fullname: true } },
+            branch: { select: { name: true, address: true } },
+            members: {
+              include: {
+                client: { select: { fullname: true, nic: true, phone: true } }
+              }
+            }
+          }
+        },
+        instalments: {
+          include: {
+            client: { select: { fullname: true } }
+          },
+          orderBy: { weekNumber: "asc" }
+        }
+      }
+    });
+
+    if (!loan) throw createNotFoundError("Loan not found");
+
+    // We need the client details. A loan belongs to a group, and the group has members. 
+    // Wait, the instalments have clientIds. Or we can just get the leader/member info.
+    // For simplicity, let's fetch the group members' clients and find the main client if it's a member loan.
+    // Actually, "Loan Details" usually apply to the whole group, or we can just list the loan info.
+    // Let's pass the raw loan data to the generator.
+    
+    // Gather all collections for this loan
+    const collections = await fastify.prisma.collectionItem.findMany({
+      where: { instalment: { loanId: id } },
+      include: {
+        collection: { select: { date: true, collector: { select: { fullname: true } } } }
+      },
+      orderBy: { collection: { date: "desc" } }
+    });
+
+    const flatCollections = collections.map(c => ({
+      date: new Date(c.collection.date).toLocaleDateString(),
+      receiptNo: c.id.substring(0, 8).toUpperCase(),
+      amount: c.amount,
+      collectedBy: c.collection.collector?.fullname || "Unknown",
+      status: c.status
+    }));
+
+    const pdfData = {
+      loan: {
+        loanNo: loan.loanNo,
+        status: loan.status,
+        lentAmount: loan.leaderLentAmount + loan.memberLentAmount, // Total lent
+        totalPayableAmount: loan.leaderWeeklyAmount * loan.totalWeeks + loan.memberWeeklyAmount * loan.totalWeeks,
+        totalPaidAmount: collections.filter(c => c.status !== 'REJECTED').reduce((sum, c) => sum + Number(c.amount), 0),
+        remainingDue: loan.leaderWeeklyAmount * loan.totalWeeks + loan.memberWeeklyAmount * loan.totalWeeks - collections.filter(c => c.status !== 'REJECTED').reduce((sum, c) => sum + Number(c.amount), 0),
+        createdAt: new Date(loan.createdAt).toLocaleDateString()
+      },
+      client: {
+        fullname: loan.group.name + " (Group)",
+        nic: "-",
+        phone: "-",
+        address: loan.group.branch?.name || "-"
+      },
+      members: loan.group.members.map(m => ({
+        fullname: m.client?.fullname || "-",
+        nic: m.client?.nic || "-",
+        phone: m.client?.phone || "-",
+        role: m.isLeader ? "Leader" : "Member"
+      })),
+      instalments: loan.instalments.map(i => ({
+        memberName: i.client?.fullname || "Unknown",
+        number: i.weekNumber,
+        dueDate: new Date(i.dueDate).toLocaleDateString(),
+        dueAmount: i.dueAmount,
+        paidAmount: i.paidAmount,
+        remainingDue: i.remainingDue,
+        status: i.status
+      })),
+      collections: flatCollections
+    };
+
+    const pdfBuffer = await generateLoanPdf(pdfData);
+
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', `attachment; filename="loan-${loan.loanNo}.pdf"`);
+    return reply.send(pdfBuffer);
   });
 
   // Get loan instalments separately
