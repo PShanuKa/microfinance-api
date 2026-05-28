@@ -574,6 +574,50 @@ export default async function loanRoutes(fastify, opts) {
     }
   });
 
+  // Complete Loan
+  fastify.post("/:id/complete", async (request, reply) => {
+    const { id } = request.params;
+    
+    // Role check directly from JWT payload
+    const allowedRoles = ["ADMIN", "BRANCH_MANAGER", "APPROVER"];
+    if (!(request.user.roles || []).some(role => allowedRoles.includes(role))) {
+      throw createBadRequestError("You do not have permission to complete loans.");
+    }
+
+    const loan = await fastify.prisma.loan.findUnique({
+      where: { id },
+      include: { instalments: true }
+    });
+
+    if (!loan) throw createNotFoundError("Loan not found");
+    if (loan.status !== "ACTIVE" && loan.status !== "APPROVED") {
+      throw createBadRequestError("Only active or approved loans can be completed");
+    }
+
+    // Verify balance is 0
+    const remainingDue = loan.instalments.reduce((sum, inst) => sum + Number(inst.remainingDue), 0);
+    if (remainingDue > 0) {
+      throw createBadRequestError("Cannot complete loan: there is still an outstanding balance.");
+    }
+
+    await fastify.prisma.$transaction(async (tx) => {
+      await tx.loan.update({
+        where: { id },
+        data: { status: "COMPLETED" }
+      });
+      await tx.auditLog.create({
+        data: {
+          action: "LOAN_COMPLETED",
+          entity: "LOAN",
+          entityId: id,
+          userId: request.user.id
+        }
+      });
+    });
+
+    return { success: true, message: "Loan marked as completed." };
+  });
+
   // Get single loan without instalments
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params;

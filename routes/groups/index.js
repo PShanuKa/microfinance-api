@@ -395,7 +395,7 @@ export default async function groupRoutes(fastify, opts) {
                       groupId,
                       status: "APPROVED" 
                     },
-                    weekNumber: week ? Number(week) : undefined,
+                    ...(week ? { weekNumber: Number(week) } : { status: { in: ["UNPAID", "PARTIAL"] } }),
                   },
                   orderBy: { weekNumber: "asc" }
                 }
@@ -409,17 +409,34 @@ export default async function groupRoutes(fastify, opts) {
     if (!group) throw createNotFoundError("Group not found");
 
     const members = group.members.map(m => {
-      // Find the instalment for the requested week
-      const targetInstalment = m.client.instalments.find(i => i.weekNumber === Number(week));
-      
-      return {
-        clientId: m.clientId,
-        fullname: m.client.fullname,
-        isLeader: m.isLeader,
-        dueAmount: targetInstalment ? Number(targetInstalment.dueAmount) : 0,
-        remainingDue: targetInstalment ? Number(targetInstalment.remainingDue) : 0,
-        status: targetInstalment ? targetInstalment.status : "N/A"
-      };
+      if (week) {
+        // Find the instalment for the requested week
+        const targetInstalment = m.client.instalments.find(i => i.weekNumber === Number(week));
+        return {
+          clientId: m.clientId,
+          fullname: m.client.fullname,
+          isLeader: m.isLeader,
+          dueAmount: targetInstalment ? Number(targetInstalment.dueAmount) : 0,
+          remainingDue: targetInstalment ? Number(targetInstalment.remainingDue) : 0,
+          status: targetInstalment ? targetInstalment.status : "N/A"
+        };
+      } else {
+        // Sum up all unpaid/partial instalments
+        const totalRemaining = m.client.instalments.reduce((sum, i) => sum + Number(i.remainingDue), 0);
+        return {
+          clientId: m.clientId,
+          fullname: m.client.fullname,
+          isLeader: m.isLeader,
+          remainingDue: totalRemaining,
+          unpaidInstalments: m.client.instalments.map(i => ({
+            id: i.id,
+            weekNumber: i.weekNumber,
+            dueAmount: Number(i.dueAmount),
+            remainingDue: Number(i.remainingDue),
+            status: i.status
+          }))
+        };
+      }
     });
 
     return { success: true, group: { name: group.name, branch: group.branch ? group.branch.name : "" }, members };

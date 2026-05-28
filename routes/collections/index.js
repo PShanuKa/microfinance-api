@@ -9,13 +9,13 @@ export default async function collectionRoutes(fastify, opts) {
     schema: {
       body: {
         type: "object",
-        required: ["groupId", "date", "instalmentNumber", "collectorId"],
+        required: ["groupId", "date", "collectorId"],
         properties: {
           groupId: { type: "string" },
           loanId: { type: "string" },
           date: { type: "string", format: "date-time" },
-          weekNumber: { type: "number" },
-          instalmentNumber: { type: "number" },
+          weekNumber: { type: "number", nullable: true },
+          instalmentNumber: { type: "number", nullable: true, default: 0 },
           bankReference: { type: "string" },
           breakdownNotes: { type: "string" },
           attachments: {
@@ -47,6 +47,7 @@ export default async function collectionRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const { groupId, loanId, date, weekNumber, instalmentNumber,  breakdownData, bankReference, breakdownNotes, attachments } = request.body;
       const collectorId = request.user.id;
+      const finalInstalmentNumber = instalmentNumber || 0;
       // 1. Validation
       const group = await fastify.prisma.group.findUnique({
         where: { id: groupId },
@@ -154,8 +155,8 @@ export default async function collectionRoutes(fastify, opts) {
             groupId,
             loanId,
             date: new Date(date),
-            weekNumber,
-            instalmentNumber,
+            weekNumber: weekNumber || finalInstalmentNumber,
+            instalmentNumber: finalInstalmentNumber,
             collectorId,
             amountCollected: totalAmount,
             bankReference,
@@ -363,18 +364,40 @@ export default async function collectionRoutes(fastify, opts) {
         clientPayments[clientId].itemIds.push(item.id);
       }
 
-      // Re-allocate payments for each client to make sure it matches the CURRENT database state
-      for (const clientId of Object.keys(clientPayments)) {
-        const payment = clientPayments[clientId];
+      const allItemCreates = [];
+      const allInstalmentUpdates = [];
 
-        // Fetch all instalments for this client and loan, ordered by weekNumber ASC
-        const allInstalments = await tx.instalment.findMany({
-          where: {
-            clientId: payment.clientId,
-            loanId: payment.loanId,
-          },
-          orderBy: { weekNumber: "asc" }
+      const allClientPayments = Object.values(clientPayments);
+      const clientIds = allClientPayments.map(p => p.clientId);
+      const loanIds = allClientPayments.map(p => p.loanId);
+
+      // Fetch ALL instalments for ALL clients in one query
+      const allInstalmentsGlobally = await tx.instalment.findMany({
+        where: {
+          clientId: { in: clientIds },
+          loanId: { in: loanIds }
+        },
+        orderBy: { weekNumber: "asc" }
+      });
+
+      // Delete all existing items for these clients in one query
+      const allItemIdsToDelete = [];
+      for (const p of allClientPayments) {
+        allItemIdsToDelete.push(...p.itemIds);
+      }
+      
+      if (allItemIdsToDelete.length > 0) {
+        await tx.collectionItem.deleteMany({
+          where: { id: { in: allItemIdsToDelete } }
         });
+      }
+
+      // Re-allocate payments for each client to make sure it matches the CURRENT database state
+      for (const payment of allClientPayments) {
+        // Filter instalments for this specific client and loan
+        const allInstalments = allInstalmentsGlobally.filter(
+          i => i.clientId === payment.clientId && i.loanId === payment.loanId
+        );
 
         let remainingPayment = payment.totalAmount;
         const newAllocations = [];
@@ -409,26 +432,17 @@ export default async function collectionRoutes(fastify, opts) {
           }
         }
 
-        // Delete existing items for this client in this collection
-        await tx.collectionItem.deleteMany({
-          where: {
-            id: { in: payment.itemIds }
-          }
-        });
-
-        // Re-create the collection items with the new allocations
+        // Queue new items
         for (const alloc of newAllocations) {
-          await tx.collectionItem.create({
-            data: {
-              collectionId: id,
-              instalmentId: alloc.instalmentId,
-              amount: Number(alloc.amount),
-              status: "APPROVED"
-            }
+          allItemCreates.push({
+            collectionId: id,
+            instalmentId: alloc.instalmentId,
+            amount: Number(alloc.amount),
+            status: "APPROVED"
           });
         }
 
-        // Update the instalments' paid amount, remaining due, and status
+        // Queue instalment updates
         for (const alloc of newAllocations) {
           const inst = allInstalments.find(i => i.id === alloc.instalmentId);
 
@@ -437,7 +451,7 @@ export default async function collectionRoutes(fastify, opts) {
             const newPaid = currentPaid + Number(alloc.amount);
             const remaining = Number(inst.dueAmount) - newPaid;
 
-            await tx.instalment.update({
+            allInstalmentUpdates.push({
               where: { id: inst.id },
               data: {
                 paidAmount: newPaid,
@@ -448,6 +462,18 @@ export default async function collectionRoutes(fastify, opts) {
             });
           }
         }
+      }
+
+      // Execute queued inserts
+      if (allItemCreates.length > 0) {
+        await tx.collectionItem.createMany({ data: allItemCreates });
+      }
+
+      // Execute queued updates concurrently
+      if (allInstalmentUpdates.length > 0) {
+        await Promise.all(
+          allInstalmentUpdates.map(updatePayload => tx.instalment.update(updatePayload))
+        );
       }
 
       // Update Collection status
@@ -468,8 +494,8 @@ export default async function collectionRoutes(fastify, opts) {
 
       return { success: true };
     }, {
-      maxWait: 5000,
-      timeout: 30000
+      maxWait: 10000,
+      timeout: 120000
     });
 
     return result;
