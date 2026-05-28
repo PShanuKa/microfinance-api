@@ -354,7 +354,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
     
     // Default placeholders
     const placeholders = {
-      "{{companyName}}": "A. A. L. G. B. G.",
+      "{{companyName}}": "Don & Dons Microfinance",
       "{{branchName}}": mortgage.branch?.name || "Main Branch",
       "{{payeeName}}": mortgage.client?.fullname || "Unknown",
       "{{idNumber}}": mortgage.client?.nic || "Unknown",
