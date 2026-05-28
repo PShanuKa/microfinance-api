@@ -54,9 +54,10 @@ export async function processMortgageInstalments(prisma, log) {
           
      
           const instDueDate = new Date(instCreationDate);
-          instDueDate.setUTCDate(instCreationDate.getUTCDate() + 3);
+          instDueDate.setUTCDate(instCreationDate.getUTCDate() + 2);
 
-          const dueAmount = mortgage.monthlyDueAmount;
+          const remainingPrincipal = Math.max(0, Number(mortgage.lentAmount) - Number(mortgage.principalPaid || 0));
+          const dueAmount = remainingPrincipal * (Number(mortgage.interestRate) / 100);
 
           const result = await prisma.mortgageInstalment.upsert({
             where: {

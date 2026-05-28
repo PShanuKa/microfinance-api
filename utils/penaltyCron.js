@@ -48,7 +48,7 @@ export async function processDailyPenalties(prisma, log) {
         const graceEnd = normalizeDate(inst.dueDate);
        
         
-        const penaltyEnd = normalizeDate(inst.dueDate);
+        const penaltyEnd = normalizeDate(inst.createdAt);
         penaltyEnd.setUTCMonth(penaltyEnd.getUTCMonth() + 1);
 
         const lastApplied = inst.lastPenaltyAppliedAt 
@@ -78,7 +78,7 @@ export async function processDailyPenalties(prisma, log) {
         const graceEnd = normalizeDate(inst.dueDate);
     
 
-        const penaltyEnd = normalizeDate(inst.dueDate);
+        const penaltyEnd = normalizeDate(inst.createdAt);
         penaltyEnd.setUTCMonth(penaltyEnd.getUTCMonth() + 1);
 
         
@@ -87,9 +87,10 @@ export async function processDailyPenalties(prisma, log) {
         if (effectiveToday <= graceEnd) continue;
 
         
+        const instDate = normalizeDate(inst.createdAt);
         const lastApplied = inst.lastPenaltyAppliedAt
           ? normalizeDate(inst.lastPenaltyAppliedAt)
-          : graceEnd;
+          : instDate;
 
         
         const msInDay = 1000 * 60 * 60 * 24;
@@ -97,7 +98,7 @@ export async function processDailyPenalties(prisma, log) {
 
        
         if (daysToPenalize > 0) {
-          const penaltyToAdd = Number(loan.dailyPenaltyAmount) * daysToPenalize;
+          const penaltyToAdd = Number(inst.dueAmount) * 0.01 * daysToPenalize;
 
           await prisma.mortgageInstalment.update({
             where: { id: inst.id },
