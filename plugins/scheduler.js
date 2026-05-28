@@ -34,6 +34,7 @@ export default async function schedulerPlugin(fastify, opts) {
   fastify.log.info("✔ Scheduler registered: instalments + penalties (daily at midnight).");
 
   // ─── Manual trigger: instalment generation ──────────────────────────────────
+  /*
   fastify.post("/api/scheduler/run-mortgage-instalments", {
     preHandler: fastify.authenticate,
     handler: async (request, reply) => {
@@ -64,4 +65,5 @@ export default async function schedulerPlugin(fastify, opts) {
       };
     },
   });
+  */
 }
