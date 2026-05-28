@@ -1,4 +1,5 @@
 // app.js
+// trigger nodemon restart again
 import "dotenv/config";
 import Fastify from "fastify";
 import ajvErrors from "ajv-errors";

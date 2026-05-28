@@ -39,19 +39,22 @@ export async function generateLoanPdf(data, templateName = "loan-details.html") 
     const headerHtml = headerTemplateCompiled(templateData);
 
     const template = handlebars.compile(bodyHtmlRaw);
-    const compiledHtml = template(templateData);
+    let compiledHtml = template(templateData);
+
+    // Inject header directly into the body to show it only on the first page
+    compiledHtml = compiledHtml.replace("<body>", `<body>\n${headerHtml}\n`);
 
     // PDF options
     let options = { 
       format: 'A4',
       margin: {
-        top: "60px",
+        top: "40px", // reduced since header is no longer in the margin
         bottom: "60px",
         left: "20px",
         right: "20px"
       },
       displayHeaderFooter: true,
-      headerTemplate: headerHtml,
+      headerTemplate: "<span></span>", // empty header so it doesn't repeat
       footerTemplate: footerHtml,
       printBackground: true
     };
