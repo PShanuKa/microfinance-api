@@ -571,6 +571,10 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         throw createNotFoundError("Mortgage loan not found");
       }
 
+      if (existing.status !== "DRAFT" && existing.status !== "PENDING") {
+        throw createBadRequestError("Only Draft or Pending mortgage loans can be edited.");
+      }
+
       // Verify client exists and is not blacklisted
       const client = await fastify.prisma.client.findUnique({
         where: { id: data.clientId }
