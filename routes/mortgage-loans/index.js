@@ -247,11 +247,12 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           search: { type: "string" },
           startDate: { type: "string" },
           endDate: { type: "string" },
+          branchId: { type: "string" },
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, search, startDate, endDate } = request.query;
+      const { page, limit, search, startDate, endDate, branchId } = request.query;
       const skip = (page - 1) * limit;
 
       const where = {
@@ -270,6 +271,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
               lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
             }
           } : {},
+          branchId && branchId !== "All" ? { mortgage: { branchId } } : {},
         ],
       };
 
@@ -305,7 +307,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
   fastify.get("/collections/export/pdf", {
     preValidation: [fastify.authenticate],
   }, async (request, reply) => {
-    const { search, startDate, endDate } = request.query;
+    const { search, startDate, endDate, branchId } = request.query;
     
     const where = {
       AND: [
@@ -323,6 +325,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
             lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
           }
         } : {},
+        branchId && branchId !== "All" ? { mortgage: { branchId } } : {},
       ],
     };
 
