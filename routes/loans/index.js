@@ -691,7 +691,8 @@ export default async function loanRoutes(fastify, opts) {
     const collections = await fastify.prisma.collectionItem.findMany({
       where: { instalment: { loanId: id } },
       include: {
-        collection: { select: { date: true, collector: { select: { fullname: true } } } }
+        collection: { select: { date: true, collector: { select: { fullname: true } } } },
+        instalment: { include: { client: { select: { fullname: true } } } }
       },
       orderBy: { collection: { date: "desc" } }
     });
@@ -699,6 +700,8 @@ export default async function loanRoutes(fastify, opts) {
     const flatCollections = collections.map(c => ({
       date: new Date(c.collection.date).toLocaleDateString(),
       receiptNo: c.id.substring(0, 8).toUpperCase(),
+      memberName: c.instalment?.client?.fullname || "Unknown",
+      weekNumber: c.instalment?.weekNumber || "-",
       amount: c.amount,
       collectedBy: c.collection.collector?.fullname || "Unknown",
       status: c.status
