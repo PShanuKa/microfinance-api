@@ -32,12 +32,12 @@ export default async function reportRoutes(fastify, options) {
         dateFilter.lte = new Date(`${endDate}T23:59:59.999Z`);
       }
 
-      // Base query for clients who have active loans
+      // Base query for clients who have active or completed loans
       const clientWhere = {
         isDeleted: false,
         instalments: {
           some: {
-            loan: { status: { in: ["ACTIVE", "APPROVED"] } },
+            loan: { status: { in: ["ACTIVE", "APPROVED", "COMPLETED"] } },
           },
         },
       };
@@ -60,7 +60,7 @@ export default async function reportRoutes(fastify, options) {
             include: { group: true }
           },
           instalments: {
-            where: { loan: { status: { in: ["ACTIVE", "APPROVED"] } } },
+            where: { loan: { status: { in: ["ACTIVE", "APPROVED", "COMPLETED"] } } },
             include: {
               collectionItems: {
                 include: { collection: true }
@@ -89,12 +89,11 @@ export default async function reportRoutes(fastify, options) {
 
         client.instalments.forEach((inst) => {
           const instDueDate = new Date(inst.dueDate);
-          instDueDate.setHours(0, 0, 0, 0);
 
           // Expected in Range
           if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
+            const start = new Date(`${startDate}T00:00:00.000Z`);
+            const end = new Date(`${endDate}T23:59:59.999Z`);
             if (instDueDate >= start && instDueDate <= end) {
               clientExpected += Number(inst.dueAmount);
             }
@@ -107,9 +106,8 @@ export default async function reportRoutes(fastify, options) {
             if (item.status !== "REJECTED") {
               if (startDate && endDate) {
                 const colDate = new Date(item.collection.date);
-                colDate.setHours(0, 0, 0, 0);
-                const start = new Date(startDate);
-                const end = new Date(endDate);
+                const start = new Date(`${startDate}T00:00:00.000Z`);
+                const end = new Date(`${endDate}T23:59:59.999Z`);
                 if (colDate >= start && colDate <= end) {
                   clientCollected += Number(item.amount);
                 }
@@ -127,8 +125,7 @@ export default async function reportRoutes(fastify, options) {
           // Total Outstanding (up to end date)
           if (inst.remainingDue > 0) {
             if (endDate) {
-              const end = new Date(endDate);
-              end.setHours(23, 59, 59, 999);
+              const end = new Date(`${endDate}T23:59:59.999Z`);
               if (instDueDate <= end) {
                 clientTotalOutstanding += Number(inst.remainingDue);
               }
@@ -228,7 +225,7 @@ export default async function reportRoutes(fastify, options) {
       const clientWhere = {
         isDeleted: false,
         instalments: {
-          some: { loan: { status: { in: ["ACTIVE", "APPROVED"] } } },
+          some: { loan: { status: { in: ["ACTIVE", "APPROVED", "COMPLETED"] } } },
         },
       };
 
@@ -245,7 +242,7 @@ export default async function reportRoutes(fastify, options) {
         include: {
           groupMembers: { include: { group: true } },
           instalments: {
-            where: { loan: { status: { in: ["ACTIVE", "APPROVED"] } } },
+            where: { loan: { status: { in: ["ACTIVE", "APPROVED", "COMPLETED"] } } },
             include: {
               collectionItems: { include: { collection: true } }
             }
@@ -270,11 +267,10 @@ export default async function reportRoutes(fastify, options) {
 
         client.instalments.forEach((inst) => {
           const instDueDate = new Date(inst.dueDate);
-          instDueDate.setHours(0, 0, 0, 0);
 
           if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
+            const start = new Date(`${startDate}T00:00:00.000Z`);
+            const end = new Date(`${endDate}T23:59:59.999Z`);
             if (instDueDate >= start && instDueDate <= end) clientExpected += Number(inst.dueAmount);
           } else {
             clientExpected += Number(inst.dueAmount);
@@ -284,9 +280,8 @@ export default async function reportRoutes(fastify, options) {
             if (item.status !== "REJECTED") {
               if (startDate && endDate) {
                 const colDate = new Date(item.collection.date);
-                colDate.setHours(0, 0, 0, 0);
-                const start = new Date(startDate);
-                const end = new Date(endDate);
+                const start = new Date(`${startDate}T00:00:00.000Z`);
+                const end = new Date(`${endDate}T23:59:59.999Z`);
                 if (colDate >= start && colDate <= end) clientCollected += Number(item.amount);
               } else {
                 clientCollected += Number(item.amount);
@@ -298,8 +293,7 @@ export default async function reportRoutes(fastify, options) {
 
           if (inst.remainingDue > 0) {
             if (endDate) {
-              const end = new Date(endDate);
-              end.setHours(23, 59, 59, 999);
+              const end = new Date(`${endDate}T23:59:59.999Z`);
               if (instDueDate <= end) clientTotalOutstanding += Number(inst.remainingDue);
             } else {
               clientTotalOutstanding += Number(inst.remainingDue);
