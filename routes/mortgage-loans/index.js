@@ -245,11 +245,13 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           page: { type: "number", default: 1 },
           limit: { type: "number", default: 10 },
           search: { type: "string" },
+          startDate: { type: "string" },
+          endDate: { type: "string" },
         },
       },
     },
     handler: async (request, reply) => {
-      const { page, limit, search } = request.query;
+      const { page, limit, search, startDate, endDate } = request.query;
       const skip = (page - 1) * limit;
 
       const where = {
@@ -259,7 +261,14 @@ export default async function mortgageLoanRoutes(fastify, opts) {
               { mortgage: { loanNo: { contains: search } } },
               { client: { fullname: { contains: search } } },
               { client: { clientNo: { contains: search } } },
+              { client: { nic: { contains: search } } },
             ]
+          } : {},
+          startDate && endDate ? {
+            createdAt: {
+              gte: new Date(startDate),
+              lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+            }
           } : {},
         ],
       };
@@ -270,7 +279,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           skip,
           take: limit,
           include: {
-            client: { select: { id: true, fullname: true, clientNo: true } },
+            client: { select: { id: true, fullname: true, clientNo: true, nic: true } },
             mortgage: { select: { id: true, loanNo: true } },
             collectedBy: { select: { id: true, fullname: true } },
           },
@@ -290,6 +299,79 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         },
       };
     },
+  });
+
+  // GET /api/mortgage-loans/collections/export/pdf - Export collections list to PDF
+  fastify.get("/collections/export/pdf", {
+    preValidation: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { search, startDate, endDate } = request.query;
+    
+    const where = {
+      AND: [
+        search ? {
+          OR: [
+            { mortgage: { loanNo: { contains: search } } },
+            { client: { fullname: { contains: search } } },
+            { client: { clientNo: { contains: search } } },
+            { client: { nic: { contains: search } } },
+          ]
+        } : {},
+        startDate && endDate ? {
+          createdAt: {
+            gte: new Date(startDate),
+            lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+          }
+        } : {},
+      ],
+    };
+
+    const collections = await fastify.prisma.mortgageCollection.findMany({
+      where,
+      include: {
+        client: { select: { id: true, fullname: true, nic: true } },
+        mortgage: { select: { id: true, loanNo: true } },
+        collectedBy: { select: { id: true, fullname: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    let totalPaid = 0;
+    let totalPrincipal = 0;
+
+    const records = collections.map(col => {
+      const amount = Number(col.amount);
+      const principal = Number(col.principalReduction);
+      totalPaid += amount;
+      totalPrincipal += principal;
+
+      return {
+        date: new Date(col.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        loanNo: col.mortgage?.loanNo || "-",
+        clientName: col.client?.fullname || "-",
+        nic: col.client?.nic || "-",
+        totalPaid: amount.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+        principalReduced: principal > 0 ? principal.toLocaleString('en-US', { minimumFractionDigits: 2 }) : "-",
+        collectedBy: col.collectedBy?.fullname || "System",
+      };
+    });
+
+    const pdfData = {
+      dateRange: (startDate && endDate) ? `${startDate} to ${endDate}` : "All Time",
+      search: search || "None",
+      summary: {
+        totalCount: collections.length,
+        totalPaid: totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+        totalPrincipal: totalPrincipal.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      },
+      records,
+    };
+
+    const pdfBuffer = await generateLoanPdf(pdfData, "mortgage-collection-report.html");
+
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', `attachment; filename="Mortgage-Collections-Report.pdf"`);
+    return reply.send(pdfBuffer);
   });
 
   // GET /api/mortgage-loans/collections/:id - Fetch single collection details

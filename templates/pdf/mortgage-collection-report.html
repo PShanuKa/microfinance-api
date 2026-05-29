@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; font-size: 8px; color: #000; margin: 0; padding: 0; }
+    h2 { font-size: 11px; margin-bottom: 5px; text-align: center; }
+    .filters { font-size: 8px; margin-bottom: 10px; text-align: center; color: #333; }
+    
+    .summary-box {
+      border: 1px solid #000;
+      padding: 5px;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-around;
+      background-color: #f9f9f9;
+    }
+    .summary-item {
+      text-align: center;
+    }
+    .summary-label { font-weight: bold; margin-bottom: 2px; }
+    .summary-value { font-size: 10px; }
+    
+    table { width: 100%; border-collapse: collapse; font-size: 7.5px; }
+    th, td { border: 1px solid #000; padding: 4px; text-align: left; }
+    th { font-weight: bold; background-color: #f0f0f0; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>Mortgage Collections Report</h2>
+  
+  <div class="filters">
+    Date Range: {{dateRange}} | Search: {{search}}
+  </div>
+  
+  <div class="summary-box">
+    <div class="summary-item">
+      <div class="summary-label">Total Collections Count</div>
+      <div class="summary-value">{{summary.totalCount}}</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Total Paid Amount</div>
+      <div class="summary-value">Rs. {{summary.totalPaid}}</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Total Principal Reduced</div>
+      <div class="summary-value">Rs. {{summary.totalPrincipal}}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 15%">Date & Time</th>
+        <th style="width: 15%">Loan No</th>
+        <th style="width: 25%">Client Name (NIC)</th>
+        <th class="text-right" style="width: 15%">Total Paid</th>
+        <th class="text-right" style="width: 15%">Principal Reduced</th>
+        <th class="text-center" style="width: 15%">Collected By</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each records}}
+      <tr>
+        <td>{{this.date}}</td>
+        <td>{{this.loanNo}}</td>
+        <td>{{this.clientName}} <br> <span style="color:#666; font-size:6px;">{{this.nic}}</span></td>
+        <td class="text-right">{{this.totalPaid}}</td>
+        <td class="text-right">{{this.principalReduced}}</td>
+        <td class="text-center">{{this.collectedBy}}</td>
+      </tr>
+      {{/each}}
+      {{#unless records.length}}
+      <tr>
+        <td colspan="6" class="text-center">No collections found for the selected filters</td>
+      </tr>
+      {{/unless}}
+    </tbody>
+  </table>
+
+</body>
+</html>
