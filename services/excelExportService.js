@@ -186,5 +186,149 @@ export const excelExportService = {
     // Generate buffer
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer;
+  },
+
+  /**
+   * Generates a batch Excel export of multiple Group Loans on a single sheet.
+   */
+  async generateBatchGroupLoanInterestPayments(fastify, loans) {
+    const workbook = new exceljs.Workbook();
+    const worksheet = workbook.addWorksheet('Interest Payments');
+
+    let currentRow = 1;
+    let maxTotalWeeks = 0;
+
+    const getOrdinal = (n) => {
+      const s = ["th", "st", "nd", "rd"];
+      const v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    };
+
+    for (const loan of loans) {
+      if (!loan.group || !loan.instalments) continue;
+      
+      const totalWeeks = loan.totalWeeks;
+      if (totalWeeks > maxTotalWeeks) maxTotalWeeks = totalWeeks;
+
+      const weekHeaders = Array.from({ length: totalWeeks }, (_, i) => getOrdinal(i + 1));
+      
+      // Row 1: Headers
+      const headerRow = ['Group Name', 'Group Nomber', 'Team member', ...weekHeaders];
+      worksheet.addRow(headerRow);
+      const headerRowIndex = currentRow;
+      worksheet.getRow(headerRowIndex).font = { bold: true };
+      currentRow++;
+
+      // Row 2: Dates
+      const leaderMember = loan.group.members.find(m => m.isLeader);
+      let datesRow = Array(totalWeeks).fill('');
+      if (leaderMember) {
+        const leaderInstalments = loan.instalments.filter(i => i.clientId === leaderMember.clientId);
+        leaderInstalments.forEach(inst => {
+          if (inst.weekNumber >= 1 && inst.weekNumber <= totalWeeks) {
+            datesRow[inst.weekNumber - 1] = format(new Date(inst.dueDate), 'dd/MM/yyyy');
+          }
+        });
+      } else if (loan.instalments.length > 0) {
+        const firstClientId = loan.instalments[0].clientId;
+        const firstInstalments = loan.instalments.filter(i => i.clientId === firstClientId);
+        firstInstalments.forEach(inst => {
+           if (inst.weekNumber >= 1 && inst.weekNumber <= totalWeeks) {
+            datesRow[inst.weekNumber - 1] = format(new Date(inst.dueDate), 'dd/MM/yyyy');
+          }
+        });
+      }
+
+      const sortedMembers = [...loan.group.members].sort((a, b) => {
+        if (a.isLeader) return -1;
+        if (b.isLeader) return 1;
+        return 0;
+      });
+
+      const leaderName = leaderMember ? leaderMember.client.fullname : (sortedMembers[0]?.client?.fullname || '');
+
+      worksheet.addRow([
+        loan.group.name,
+        loan.group.groupNo || loan.group.name,
+        leaderName,
+        ...datesRow
+      ]);
+      const datesRowIndex = currentRow;
+      worksheet.getRow(datesRowIndex).font = { bold: true };
+      currentRow++;
+
+      const collectionDayIndex = loan.group.collectionDay; 
+      let dayString = "";
+      if (collectionDayIndex === 7) dayString = "Sunday";
+      else if (collectionDayIndex === 1) dayString = "Monday";
+      else if (collectionDayIndex === 2) dayString = "Tuesday";
+      else if (collectionDayIndex === 3) dayString = "Wednesday";
+      else if (collectionDayIndex === 4) dayString = "Thursday";
+      else if (collectionDayIndex === 5) dayString = "Friday";
+      else if (collectionDayIndex === 6) dayString = "Saturday";
+
+      // Row 3+ : Members and their payments
+      sortedMembers.forEach((member, index) => {
+        const isLeaderRow = index === 0;
+        const col1 = isLeaderRow ? dayString : '';
+        const col2 = ''; 
+        const col3 = member.client.fullname;
+
+        const paymentsRow = Array(totalWeeks).fill('');
+        const memberInstalments = loan.instalments.filter(i => i.clientId === member.clientId);
+        
+        memberInstalments.forEach(inst => {
+          if (inst.weekNumber >= 1 && inst.weekNumber <= totalWeeks) {
+            if (Number(inst.paidAmount) > 0) {
+              paymentsRow[inst.weekNumber - 1] = Number(inst.paidAmount);
+            }
+          }
+        });
+
+        worksheet.addRow([col1, col2, col3, ...paymentsRow]);
+        currentRow++;
+      });
+
+      // Style the group table block
+      const totalCols = totalWeeks + 3;
+      const startRow = headerRowIndex;
+      const endRow = currentRow - 1;
+
+      for (let r = startRow; r <= endRow; r++) {
+        const row = worksheet.getRow(r);
+        for (let c = 1; c <= totalCols; c++) {
+          const cell = row.getCell(c);
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+
+          if (r === headerRowIndex || r === datesRowIndex) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFD9EAD3' }
+            };
+          }
+        }
+      }
+
+      // Empty row separation
+      worksheet.addRow([]);
+      currentRow++;
+    }
+
+    // Adjust column widths
+    worksheet.getColumn(1).width = 15;
+    worksheet.getColumn(2).width = 15;
+    worksheet.getColumn(3).width = 30;
+    for (let i = 4; i <= maxTotalWeeks + 3; i++) {
+      worksheet.getColumn(i).width = 12;
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer;
   }
 };

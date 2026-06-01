@@ -76,6 +76,76 @@ export default async function loanRoutes(fastify, opts) {
     },
   });
 
+  // Export Batch Loans to Excel
+  fastify.get("/export-batch-excel", {
+    schema: {
+      query: {
+        type: "object",
+        properties: {
+          search: { type: "string" },
+          status: { type: "string" },
+          collectionDay: { type: "number" },
+          branchId: { type: "string" },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      try {
+        const { search, status, collectionDay, branchId } = request.query;
+
+        const where = {
+          AND: [
+            search ? {
+              OR: [
+                { loanNo: { contains: search } },
+                { group: { name: { contains: search } } }
+              ]
+            } : {},
+            status && status !== "All" ? { status } : {},
+            collectionDay ? { group: { collectionDay } } : {},
+            branchId && branchId !== "All" ? { branchId } : {},
+          ],
+        };
+
+        const loans = await fastify.prisma.loan.findMany({
+          where,
+          include: {
+            group: {
+              include: {
+                members: {
+                  include: {
+                    client: true
+                  }
+                }
+              }
+            },
+            instalments: {
+              include: {
+                client: true,
+                collectionItems: true
+              },
+              orderBy: [
+                { clientId: 'asc' },
+                { weekNumber: 'asc' }
+              ]
+            }
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        const buffer = await excelExportService.generateBatchGroupLoanInterestPayments(fastify, loans);
+
+        reply
+          .header("Content-Disposition", `attachment; filename=Batch_GroupLoans_Interest_Payments.xlsx`)
+          .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+          .send(buffer);
+      } catch (error) {
+        request.log.error(error);
+        throw createBadRequestError("Failed to generate batch excel export");
+      }
+    }
+  });
+
   // Create Loan & Generate Instalments
   fastify.post("/", {
     schema: {
