@@ -202,9 +202,31 @@ export default async function collectionRoutes(fastify, opts) {
 
   // Get Collections (History)
   fastify.get("/", async (request, reply) => {
-    const { groupId } = request.query;
-    const where = groupId ? { groupId } : {};
-    
+    const { groupId, startDate, endDate, status, branchId } = request.query;
+    const where = {};
+
+    if (groupId) where.groupId = groupId;
+    if (status && status !== "ALL") where.status = status;
+
+    if (startDate || endDate) {
+      where.date = {};
+      if (startDate) where.date.gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.date.lte = end;
+      }
+    }
+
+    let targetBranchId = branchId;
+    if (request.user.roles?.includes("BRANCH_MANAGER") && request.user.branchId) {
+      targetBranchId = request.user.branchId;
+    }
+
+    if (targetBranchId && targetBranchId !== "ALL") {
+      where.group = { branchId: targetBranchId };
+    }
+
     const collectionsData = await fastify.prisma.collection.findMany({
       where,
       include: {
