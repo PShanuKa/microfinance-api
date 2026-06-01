@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; font-size: 10px; color: #000; margin: 0; padding: 0; }
+    h2 { font-size: 14px; margin-bottom: 5px; text-align: center; }
+    .header-box { display: flex; justify-content: space-between; border: 1px solid #000; padding: 10px; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 9px; }
+    th, td { border: 1px solid #000; padding: 5px; text-align: left; }
+    th { font-weight: bold; background-color: #f0f0f0; }
+    .total { text-align: right; font-weight: bold; font-size: 11px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Collection Receipt (ID: {{collection.id}})</h2>
+  <div class="header-box">
+    <div>
+      <strong>Group:</strong> {{collection.group.name}} ({{collection.group.groupNo}})<br>
+      <strong>Collector:</strong> {{collection.collector.fullname}}<br>
+      <strong>Date:</strong> {{formatDate collection.date}}
+    </div>
+    <div>
+      <strong>Status:</strong> {{collection.status}}<br>
+      <strong>Week/Ins No:</strong> {{collection.weekNumber}}<br>
+      <strong>Total Amount:</strong> Rs. {{collection.amountCollected}}
+    </div>
+  </div>
+
+  <h3>Collection Breakdown</h3>
+  <table>
+    <tr>
+      <th>Member</th>
+      <th>Week</th>
+      <th>Paid Amount</th>
+      <th>Status</th>
+    </tr>
+    {{#each collection.items}}
+    <tr>
+      <td>{{this.instalment.client.fullname}} ({{this.instalment.client.clientNo}})</td>
+      <td>{{this.instalment.weekNumber}}</td>
+      <td>Rs. {{this.amount}}</td>
+      <td>{{this.status}}</td>
+    </tr>
+    {{/each}}
+  </table>
+  
+  <div class="total">
+    Total Records Affected: {{collection.items.length}}
+  </div>
+</body>
+</html>

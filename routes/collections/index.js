@@ -1,5 +1,6 @@
 // routes/collections/index.js
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
+import { generateLoanPdf } from "../../services/pdfGenerator.js";
 
 export default async function collectionRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -788,5 +789,41 @@ export default async function collectionRoutes(fastify, opts) {
         }) : []
       };
     }
+  });
+
+  // Export Collection to PDF
+  fastify.get("/:id/export/pdf", async (request, reply) => {
+    const { id } = request.params;
+    
+    const collection = await fastify.prisma.collection.findUnique({
+      where: { id },
+      include: {
+        group: true,
+        collector: { select: { fullname: true } },
+        items: {
+          include: {
+            instalment: {
+              include: {
+                client: { select: { fullname: true, clientNo: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!collection) {
+      throw createNotFoundError("Collection not found");
+    }
+
+    const pdfBuffer = await generateLoanPdf({ collection }, "collection-receipt.html");
+
+    reply
+      .header("Content-Type", "application/pdf")
+      .header(
+        "Content-Disposition",
+        `attachment; filename=collection-receipt-${collection.id}.pdf`
+      )
+      .send(pdfBuffer);
   });
 }
