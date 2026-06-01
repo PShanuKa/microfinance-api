@@ -43,6 +43,7 @@
     "bcryptjs": "^3.0.3",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "fastify": "^5.8.5",
     "fastify-axios": "^1.4.2",
     "fastify-nodemailer": "^5.0.0",

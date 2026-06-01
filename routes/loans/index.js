@@ -2,6 +2,7 @@
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 import { addDays, nextDay, startOfDay } from "date-fns";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
+import { excelExportService } from "../../services/excelExportService.js";
 
 export default async function loanRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -916,5 +917,29 @@ export default async function loanRoutes(fastify, opts) {
         return { success: true, loan };
       });
     },
+  });
+
+  // Export Loan to Excel
+  fastify.get("/:id/export-excel", {
+    schema: {
+      params: { type: "object", properties: { id: { type: "string" } } }
+    },
+    handler: async (request, reply) => {
+      try {
+        const { id } = request.params;
+        const buffer = await excelExportService.generateGroupLoanInterestPayments(fastify, id);
+
+        reply
+          .header("Content-Disposition", `attachment; filename=GroupLoan-${id}-Interest-Payments.xlsx`)
+          .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+          .send(buffer);
+      } catch (error) {
+        request.log.error(error);
+        if (error.message === "Loan not found") {
+          throw createNotFoundError("Loan not found");
+        }
+        throw error;
+      }
+    }
   });
 }
