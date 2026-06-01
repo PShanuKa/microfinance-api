@@ -33,7 +33,9 @@ export default async function mortgageLoanRoutes(fastify, opts) {
             OR: [
               { loanNo: { contains: search } },
               { client: { fullname: { contains: search } } },
-              { client: { clientNo: { contains: search } } }
+              { client: { clientNo: { contains: search } } },
+              { client: { phone: { contains: search } } },
+              { client: { nic: { contains: search } } }
             ]
           } : {},
           status && status !== "All" ? { status } : {},
