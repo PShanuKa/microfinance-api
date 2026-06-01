@@ -155,6 +155,7 @@ model Loan {
   rejectionReason      String?    @db.Text
   approvedById         String?
   approvedBy           User?      @relation("ApprovedLoans", fields: [approvedById], references: [id])
+  approvedAt           DateTime?
 
   branchId             String?
   branch               Branch?    @relation("BranchLoans", fields: [branchId], references: [id])

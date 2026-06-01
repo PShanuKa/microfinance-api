@@ -330,5 +330,314 @@ export const excelExportService = {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer;
+  },
+
+  /**
+   * Generates the Loan Information Excel structure (e.g. Name, NIC, Address, Loan Amount)
+   */
+  async generateGroupLoanInformation(fastify, loanId) {
+    // 1. Fetch Loan Details
+    const loan = await fastify.prisma.loan.findUnique({
+      where: { id: loanId },
+      include: {
+        group: {
+          include: {
+            members: {
+              include: {
+                client: true
+              }
+            }
+          }
+        },
+        instalments: true,
+        approvedBy: true
+      }
+    });
+
+    if (!loan) {
+      throw new Error("Loan not found");
+    }
+
+    const workbook = new exceljs.Workbook();
+    const worksheet = workbook.addWorksheet('Loan Information');
+
+    // Row 1: Headers (Main)
+    const headerRow1 = [
+      'No', 
+      'Group', 
+      'Team leader', 
+      '', // empty for Grp No in row 2
+      'Location', 
+      'Name', 
+      'Address', 
+      'Phone Number', 
+      'Id Number', 
+      'Occupation', 
+      'Loan Amount', 
+      'Paid Amount', 
+      'O/S Amount', 
+      'Create Date', 
+      'Approval Date', 
+      'Status'
+    ];
+    worksheet.addRow(headerRow1);
+
+    // Row 2: Headers (Sub)
+    const headerRow2 = [
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      '', 
+      ''
+    ];
+    worksheet.addRow(headerRow2);
+
+    // Style headers
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(2).font = { bold: true };
+    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
+    worksheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
+
+    // Prepare data
+    const sortedMembers = [...loan.group.members].sort((a, b) => {
+      if (a.isLeader) return -1;
+      if (b.isLeader) return 1;
+      return 0;
+    });
+
+    const leaderMember = sortedMembers.find(m => m.isLeader);
+    const leaderName = leaderMember ? leaderMember.client.fullname : (sortedMembers[0]?.client?.fullname || '');
+    
+    // Fallback date values
+    const createDate = format(new Date(loan.createdAt), 'dd MMM yy');
+    const appDate = loan.approvedAt ? format(new Date(loan.approvedAt), 'dd MMM yy') : '-';
+    const status = loan.status;
+
+    // Add members
+    sortedMembers.forEach((member, index) => {
+      const isLeaderRow = index === 0;
+      
+      const col1 = index + 1; // No
+      const col2 = isLeaderRow ? loan.group.groupNo || '1' : ''; // Group No (or ID/1)
+      const col3 = isLeaderRow ? leaderName : ''; // Team leader
+      const col4 = isLeaderRow ? loan.loanNo : ''; // Grp No (using Loan No here since it fits better)
+      const col5 = loan.group.location || loan.branch?.name || ''; // Location
+      const col6 = member.client.fullname; // Name
+      const col7 = member.client.address || ''; // Address
+      const col8 = member.client.phone || ''; // Phone Number
+      const col9 = member.client.nic || ''; // Id Number
+      const col10 = member.client.job || 'Self Working'; // Occupation
+      const col11 = isLeaderRow ? Number(loan.leaderLentAmount) : Number(loan.memberLentAmount); // Loan Amount
+      
+      const memberInstalments = loan.instalments ? loan.instalments.filter(i => i.clientId === member.clientId) : [];
+      const paidAmount = memberInstalments.reduce((sum, inst) => sum + Number(inst.paidAmount || 0), 0);
+      const osAmount = col11 - paidAmount;
+
+      const col12 = paidAmount; // Paid Amount
+      const col13 = osAmount; // O/S Amount
+      const col14 = createDate; // Create Date
+      const col15 = appDate; // Approval Date
+      const col16 = status; // Status
+
+      worksheet.addRow([col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14, col15, col16]);
+    });
+
+    // Add borders to the entire table
+    const totalRows = sortedMembers.length + 2;
+    for (let r = 1; r <= totalRows; r++) {
+      const row = worksheet.getRow(r);
+      for (let c = 1; c <= 16; c++) {
+        const cell = row.getCell(c);
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      }
+    }
+
+    // Adjust column widths
+    worksheet.getColumn(1).width = 5;  // No
+    worksheet.getColumn(2).width = 8;  // Group
+    worksheet.getColumn(3).width = 20; // Team leader
+    worksheet.getColumn(4).width = 15; // Grp No
+    worksheet.getColumn(5).width = 15; // Location
+    worksheet.getColumn(6).width = 25; // Name
+    worksheet.getColumn(7).width = 30; // Address
+    worksheet.getColumn(8).width = 15; // Phone
+    worksheet.getColumn(9).width = 15; // NIC
+    worksheet.getColumn(10).width = 15; // Occupation
+    worksheet.getColumn(11).width = 15; // Loan Amount
+    worksheet.getColumn(12).width = 15; // Paid Amount
+    worksheet.getColumn(13).width = 15; // O/S Amount
+    worksheet.getColumn(14).width = 15; // Create Date
+    worksheet.getColumn(15).width = 15; // Approval Date
+    worksheet.getColumn(16).width = 15; // Status
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer;
+  },
+
+  /**
+   * Generates the Loan Information Excel structure for multiple loans
+   */
+  async generateBatchGroupLoanInformation(fastify, loans) {
+    const workbook = new exceljs.Workbook();
+    const worksheet = workbook.addWorksheet('Loan Information');
+
+    let currentRow = 1;
+
+    for (const loan of loans) {
+      if (!loan.group) continue;
+
+      // Row 1: Headers (Main)
+      const headerRow1 = [
+        'No', 
+        'Group', 
+        'Team leader', 
+        '', // empty for Grp No in row 2
+        'Location', 
+        'Name', 
+        'Address', 
+        'Phone Number', 
+        'Id Number', 
+        'Occupation', 
+        'Loan Amount', 
+        'Paid Amount', 
+        'O/S Amount', 
+        'Create Date', 
+        'Approval Date', 
+        'Status'
+      ];
+      worksheet.addRow(headerRow1);
+      const headerRowIndex1 = currentRow;
+      currentRow++;
+
+      // Row 2: Headers (Sub)
+      const headerRow2 = [
+        '', 
+        'No', 
+        '', 
+        'Grp No ', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        ''
+      ];
+      worksheet.addRow(headerRow2);
+      const headerRowIndex2 = currentRow;
+      currentRow++;
+
+      // Style headers
+      worksheet.getRow(headerRowIndex1).font = { bold: true };
+      worksheet.getRow(headerRowIndex2).font = { bold: true };
+      worksheet.getRow(headerRowIndex1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
+      worksheet.getRow(headerRowIndex2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
+
+      // Prepare data
+      const sortedMembers = [...loan.group.members].sort((a, b) => {
+        if (a.isLeader) return -1;
+        if (b.isLeader) return 1;
+        return 0;
+      });
+
+      const leaderMember = sortedMembers.find(m => m.isLeader);
+      const leaderName = leaderMember ? leaderMember.client.fullname : (sortedMembers[0]?.client?.fullname || '');
+      
+      const createDate = format(new Date(loan.createdAt), 'dd MMM yy');
+      const appDate = loan.approvedAt ? format(new Date(loan.approvedAt), 'dd MMM yy') : '-';
+      const status = loan.status;
+
+      // Add members
+      sortedMembers.forEach((member, index) => {
+        const isLeaderRow = index === 0;
+        
+        const col1 = index + 1; // No
+        const col2 = isLeaderRow ? loan.group.groupNo || '1' : ''; 
+        const col3 = isLeaderRow ? leaderName : ''; 
+        const col4 = isLeaderRow ? loan.loanNo : ''; 
+        const col5 = loan.group.location || loan.branch?.name || ''; 
+        const col6 = member.client.fullname; 
+        const col7 = member.client.address || ''; 
+        const col8 = member.client.phone || ''; 
+        const col9 = member.client.nic || ''; 
+        const col10 = member.client.job || 'Self Working'; 
+        const col11 = isLeaderRow ? Number(loan.leaderLentAmount) : Number(loan.memberLentAmount); 
+        
+        const memberInstalments = loan.instalments ? loan.instalments.filter(i => i.clientId === member.clientId) : [];
+        const paidAmount = memberInstalments.reduce((sum, inst) => sum + Number(inst.paidAmount || 0), 0);
+        const osAmount = col11 - paidAmount;
+
+        const col12 = paidAmount; 
+        const col13 = osAmount; 
+        const col14 = createDate; 
+        const col15 = appDate; 
+        const col16 = status; 
+
+        worksheet.addRow([col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14, col15, col16]);
+        currentRow++;
+      });
+
+      // Add borders to the entire table
+      const startRow = headerRowIndex1;
+      const endRow = currentRow - 1;
+      for (let r = startRow; r <= endRow; r++) {
+        const row = worksheet.getRow(r);
+        for (let c = 1; c <= 16; c++) {
+          const cell = row.getCell(c);
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        }
+      }
+
+      // Empty row separation
+      worksheet.addRow([]);
+      currentRow++;
+    }
+
+    // Adjust column widths
+    worksheet.getColumn(1).width = 5;  // No
+    worksheet.getColumn(2).width = 8;  // Group
+    worksheet.getColumn(3).width = 20; // Team leader
+    worksheet.getColumn(4).width = 15; // Grp No
+    worksheet.getColumn(5).width = 15; // Location
+    worksheet.getColumn(6).width = 25; // Name
+    worksheet.getColumn(7).width = 30; // Address
+    worksheet.getColumn(8).width = 15; // Phone
+    worksheet.getColumn(9).width = 15; // NIC
+    worksheet.getColumn(10).width = 15; // Occupation
+    worksheet.getColumn(11).width = 15; // Loan Amount
+    worksheet.getColumn(12).width = 15; // Paid Amount
+    worksheet.getColumn(13).width = 15; // O/S Amount
+    worksheet.getColumn(14).width = 15; // Create Date
+    worksheet.getColumn(15).width = 15; // Approval Date
+    worksheet.getColumn(16).width = 15; // Status
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer;
   }
 };
