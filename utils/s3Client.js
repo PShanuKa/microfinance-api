@@ -16,7 +16,7 @@ const s3Client = new S3Client({
 export const uploadFile = async (fileStream, fileName, contentType, category = "other") => {
   const now = new Date();
   const year = now.getFullYear();
-  const month = now.toLocaleString("en-US", { month: "short" }).toLowerCase();
+  const month = now.toLocaleString("en-US", { month: "short", timeZone: "Asia/Colombo" }).toLowerCase();
   
   const cleanCategory = String(category).trim().toLowerCase() || "other";
   const objectKey = `${year}/${month}/${cleanCategory}/${randomUUID()}-${fileName}`;

@@ -1,7 +1,10 @@
 FROM node:20-alpine
 
 # Install OpenSSL which is required by Prisma
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl tzdata
+
+# Force UTC timezone for all internal date operations
+ENV TZ=UTC
 
 WORKDIR /app
 

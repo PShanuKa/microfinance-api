@@ -5,7 +5,7 @@ import { processDailyPenalties }      from "../utils/penaltyCron.js";
 
 export default async function schedulerPlugin(fastify, opts) {
 
-  // ─── Daily at midnight: generate new monthly instalments ────────────────────
+  // ─── Daily at midnight (Asia/Colombo): generate new monthly instalments ─────
   cron.schedule("0 0 * * *", async () => {
     fastify.log.info("⏰ [CRON] Running mortgage instalments generator...");
     try {
@@ -14,9 +14,9 @@ export default async function schedulerPlugin(fastify, opts) {
     } catch (err) {
       fastify.log.error(err, "[CRON] Instalments job failed");
     }
-  });
+  }, { timezone: "Asia/Colombo" });
 
-  // ─── Daily at midnight: apply daily penalties to overdue instalments ─────────
+  // ─── Daily at midnight (Asia/Colombo): apply daily penalties to overdue instalments ─
   cron.schedule("0 0 * * *", async () => {
     fastify.log.info("⏰ [CRON] Running daily penalty calculator...");
     try {
@@ -29,7 +29,7 @@ export default async function schedulerPlugin(fastify, opts) {
     } catch (err) {
       fastify.log.error(err, "[CRON] Penalty job failed");
     }
-  });
+  }, { timezone: "Asia/Colombo" });
 
   fastify.log.info("✔ Scheduler registered: instalments + penalties (daily at midnight).");
 

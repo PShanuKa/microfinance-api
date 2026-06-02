@@ -1,4 +1,5 @@
 // routes/mortgage-dashboard/index.js
+import { formatMonthKeySL } from "../../utils/dateHelpers.js";
 
 export default async function mortgageDashboardRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -141,19 +142,13 @@ export default async function mortgageDashboardRoutes(fastify, opts) {
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key =
-        d.toLocaleString("en-US", { month: "short" }) +
-        " " +
-        d.getFullYear().toString().slice(-2);
+      const key = formatMonthKeySL(d);
       monthlyGroups[key] = 0;
     }
 
     for (const col of collections) {
       const colDate = new Date(col.createdAt);
-      const key =
-        colDate.toLocaleString("en-US", { month: "short" }) +
-        " " +
-        colDate.getFullYear().toString().slice(-2);
+      const key = formatMonthKeySL(colDate);
       if (monthlyGroups[key] !== undefined) {
         monthlyGroups[key] += Number(col.amount || 0);
       }

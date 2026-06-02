@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { numberToWords } from "../../utils/numberToWords.js";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
+import { formatDateSL, formatDateTimeSL, formatDateGB } from "../../utils/dateHelpers.js";
 
 export default async function mortgageLoanRoutes(fastify, opts) {
   // Enforce JWT authentication on all routes in this plugin
@@ -351,7 +352,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
       totalPrincipal += principal;
 
       return {
-        date: new Date(col.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        date: formatDateTimeSL(col.createdAt),
         loanNo: col.mortgage?.loanNo || "-",
         clientName: col.client?.fullname || "-",
         nic: col.client?.nic || "-",
@@ -455,7 +456,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
       "{{payeeName}}": mortgage.client?.fullname || "Unknown",
       "{{idNumber}}": mortgage.client?.nic || "Unknown",
       "{{voucherNo}}": mortgage.loanNo,
-      "{{date}}": mortgage.approvedAt ? new Date(mortgage.approvedAt).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB'),
+      "{{date}}": mortgage.approvedAt ? formatDateGB(mortgage.approvedAt) : formatDateGB(new Date()),
       "{{invNo}}": "-",
       "{{description}}": "Mortgage Loan Disbursement",
       "{{amountFormatted}}": amountFormatted,
@@ -1096,7 +1097,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
     if (!mortgage) throw createNotFoundError("Mortgage Loan not found");
 
     const flatCollections = mortgage.collections.map(c => ({
-      date: new Date(c.createdAt).toLocaleDateString(),
+      date: formatDateSL(c.createdAt),
       receiptNo: c.id.substring(0, 8).toUpperCase(),
       type: "Mortgage",
       amount: c.amount,
@@ -1115,7 +1116,7 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         assessedValue: mortgage.assessedValue,
         ltvRatio: mortgage.ltvRatio,
         monthlyDueAmount: mortgage.monthlyDueAmount,
-        createdAt: new Date(mortgage.createdAt).toLocaleDateString()
+        createdAt: formatDateSL(mortgage.createdAt)
       },
       client: {
         fullname: mortgage.client.fullname,

@@ -2,11 +2,12 @@ import fs from "fs/promises";
 import path from "path";
 import handlebars from "handlebars";
 import html_to_pdf from "html-pdf-node";
+import { formatDateSL } from "../utils/dateHelpers.js";
 
 // Optional: Register helpers if needed
 handlebars.registerHelper('formatDate', function(date) {
   if (!date) return "-";
-  return new Date(date).toLocaleDateString();
+  return formatDateSL(date);
 });
 
 export async function generateLoanPdf(data, templateName = "loan-details.html") {

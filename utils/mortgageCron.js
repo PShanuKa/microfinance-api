@@ -10,7 +10,7 @@ export async function processMortgageInstalments(prisma, log) {
   const normalizeDate = (dateInput) => {
     if (!dateInput) return null;
     const d = new Date(dateInput);
-    return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   };
 
   const today = normalizeDate(new Date());

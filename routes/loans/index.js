@@ -3,6 +3,7 @@ import { createBadRequestError, createNotFoundError } from "../../utils/errors.j
 import { addDays, nextDay, startOfDay } from "date-fns";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
 import { excelExportService } from "../../services/excelExportService.js";
+import { formatDateSL } from "../../utils/dateHelpers.js";
 
 export default async function loanRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -840,7 +841,7 @@ export default async function loanRoutes(fastify, opts) {
     });
 
     const flatCollections = collections.map(c => ({
-      date: new Date(c.collection.date).toLocaleDateString(),
+      date: formatDateSL(c.collection.date),
       receiptNo: c.id.substring(0, 8).toUpperCase(),
       memberName: c.instalment?.client?.fullname || "Unknown",
       weekNumber: c.instalment?.weekNumber || "-",
@@ -857,7 +858,7 @@ export default async function loanRoutes(fastify, opts) {
         totalPayableAmount: loan.leaderWeeklyAmount * loan.totalWeeks + loan.memberWeeklyAmount * loan.totalWeeks,
         totalPaidAmount: collections.filter(c => c.status !== 'REJECTED').reduce((sum, c) => sum + Number(c.amount), 0),
         remainingDue: loan.leaderWeeklyAmount * loan.totalWeeks + loan.memberWeeklyAmount * loan.totalWeeks - collections.filter(c => c.status !== 'REJECTED').reduce((sum, c) => sum + Number(c.amount), 0),
-        createdAt: new Date(loan.createdAt).toLocaleDateString()
+        createdAt: formatDateSL(loan.createdAt)
       },
       client: {
         fullname: loan.group.name + " (Group)",
@@ -874,7 +875,7 @@ export default async function loanRoutes(fastify, opts) {
       instalments: loan.instalments.map(i => ({
         memberName: i.client?.fullname || "Unknown",
         number: i.weekNumber,
-        dueDate: new Date(i.dueDate).toLocaleDateString(),
+        dueDate: formatDateSL(i.dueDate),
         dueAmount: i.dueAmount,
         paidAmount: i.paidAmount,
         remainingDue: i.remainingDue,

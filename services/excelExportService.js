@@ -1,5 +1,21 @@
 import exceljs from 'exceljs';
-import { format } from 'date-fns';
+import { formatDateSL } from '../utils/dateHelpers.js';
+
+// Helper to format dates for Excel cells in Asia/Colombo timezone
+function formatExcelDate(date, pattern = 'dd/MM/yyyy') {
+  if (!date) return '';
+  const d = new Date(date);
+  // Use Asia/Colombo timezone for display
+  const opts = { timeZone: 'Asia/Colombo' };
+  const day = d.toLocaleDateString('en-GB', { day: '2-digit', ...opts });
+  const month = d.toLocaleDateString('en-GB', { month: '2-digit', ...opts });
+  const year = d.toLocaleDateString('en-GB', { year: 'numeric', ...opts });
+  if (pattern === 'dd/MM/yyyy') return `${day}/${month}/${year}`;
+  // For 'dd MMM yy' pattern
+  const monthShort = d.toLocaleDateString('en-GB', { month: 'short', ...opts });
+  const yearShort = d.toLocaleDateString('en-GB', { year: '2-digit', ...opts });
+  return `${day} ${monthShort} ${yearShort}`;
+}
 
 /**
  * Service to handle all Excel Exports
@@ -75,7 +91,7 @@ export const excelExportService = {
       const leaderInstalments = loan.instalments.filter(i => i.clientId === leaderMember.clientId);
       leaderInstalments.forEach(inst => {
         if (inst.weekNumber >= 1 && inst.weekNumber <= totalWeeks) {
-          datesRow[inst.weekNumber - 1] = format(new Date(inst.dueDate), 'dd/MM/yyyy');
+          datesRow[inst.weekNumber - 1] = formatExcelDate(new Date(inst.dueDate));
         }
       });
     } else if (loan.instalments.length > 0) {
@@ -84,7 +100,7 @@ export const excelExportService = {
       const firstInstalments = loan.instalments.filter(i => i.clientId === firstClientId);
       firstInstalments.forEach(inst => {
          if (inst.weekNumber >= 1 && inst.weekNumber <= totalWeeks) {
-          datesRow[inst.weekNumber - 1] = format(new Date(inst.dueDate), 'dd/MM/yyyy');
+          datesRow[inst.weekNumber - 1] = formatExcelDate(new Date(inst.dueDate));
         }
       });
     }
@@ -420,8 +436,8 @@ export const excelExportService = {
     const leaderName = leaderMember ? leaderMember.client.fullname : (sortedMembers[0]?.client?.fullname || '');
     
     // Fallback date values
-    const createDate = format(new Date(loan.createdAt), 'dd MMM yy');
-    const appDate = loan.approvedAt ? format(new Date(loan.approvedAt), 'dd MMM yy') : '-';
+    const createDate = formatExcelDate(new Date(loan.createdAt), 'dd MMM yy');
+    const appDate = loan.approvedAt ? formatExcelDate(new Date(loan.approvedAt), 'dd MMM yy') : '-';
     const status = loan.status;
 
     // Add members
@@ -564,8 +580,8 @@ export const excelExportService = {
       const leaderMember = sortedMembers.find(m => m.isLeader);
       const leaderName = leaderMember ? leaderMember.client.fullname : (sortedMembers[0]?.client?.fullname || '');
       
-      const createDate = format(new Date(loan.createdAt), 'dd MMM yy');
-      const appDate = loan.approvedAt ? format(new Date(loan.approvedAt), 'dd MMM yy') : '-';
+      const createDate = formatExcelDate(new Date(loan.createdAt), 'dd MMM yy');
+      const appDate = loan.approvedAt ? formatExcelDate(new Date(loan.approvedAt), 'dd MMM yy') : '-';
       const status = loan.status;
 
       // Add members

@@ -1,3 +1,6 @@
+// 🌍 Force UTC timezone for all internal Date operations.
+// Display formatting uses Asia/Colombo via dateHelpers.js.
+process.env.TZ = 'UTC';
 
 import { buildApp } from "./app.js";
 
