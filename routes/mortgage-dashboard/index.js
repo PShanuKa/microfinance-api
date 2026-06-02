@@ -1,5 +1,5 @@
 // routes/mortgage-dashboard/index.js
-import { formatMonthKeySL } from "../../utils/dateHelpers.js";
+import { formatMonthKeySL, getStartOfDaySL } from "../../utils/dateHelpers.js";
 
 export default async function mortgageDashboardRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -110,8 +110,7 @@ export default async function mortgageDashboardRoutes(fastify, opts) {
     // 4. Overdue Instalments
     // ──────────────────────────────────────────────
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getStartOfDaySL();
 
     const overdueInstalments = await fastify.prisma.mortgageInstalment.count({
       where: {

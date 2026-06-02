@@ -1,5 +1,6 @@
 // routes/non-collection-weeks/index.js
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
+import { getStartOfDaySL, getEndOfDaySL } from "../../utils/dateHelpers.js";
 
 export default async function nonCollectionWeekRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -28,14 +29,9 @@ export default async function nonCollectionWeekRoutes(fastify, opts) {
     handler: async (request, reply) => {
       const { startDate, endDate, reason } = request.body;
       
-      const startObj = new Date(startDate);
-      startObj.setHours(0, 0, 0, 0);
-      
-      const endObj = new Date(endDate);
-      endObj.setHours(23, 59, 59, 999);
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const startObj = getStartOfDaySL(startDate);
+      const endObj = getEndOfDaySL(endDate);
+      const today = getStartOfDaySL();
 
       // 1. Only allow future dates
       if (startObj <= today) {
@@ -116,19 +112,16 @@ export default async function nonCollectionWeekRoutes(fastify, opts) {
         let newEnd = oldEnd;
 
         if (data.startDate) {
-          newStart = new Date(data.startDate);
-          newStart.setHours(0, 0, 0, 0);
+          newStart = getStartOfDaySL(data.startDate);
         }
         if (data.endDate) {
-          newEnd = new Date(data.endDate);
-          newEnd.setHours(23, 59, 59, 999);
+          newEnd = getEndOfDaySL(data.endDate);
         }
 
         const datesChanged = newStart.getTime() !== oldStart.getTime() || newEnd.getTime() !== oldEnd.getTime();
 
         if (datesChanged) {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
+          const today = getStartOfDaySL();
           
           if (newStart <= today) {
             throw createBadRequestError("Non-collection weeks can only be set to future dates.");

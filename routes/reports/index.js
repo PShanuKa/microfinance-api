@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import createError from "http-errors";
+import { createBadRequestError } from "../../utils/errors.js";
+import { getStartOfDaySL, getEndOfDaySL } from "../../utils/dateHelpers.js";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
 
 const prisma = new PrismaClient();
@@ -84,8 +85,7 @@ export default async function reportRoutes(fastify, options) {
         let clientArrears = 0;
         let clientTotalOutstanding = 0;
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getStartOfDaySL();
 
         client.instalments.forEach((inst) => {
           const instDueDate = new Date(inst.dueDate);
@@ -262,8 +262,7 @@ export default async function reportRoutes(fastify, options) {
         let clientArrears = 0;
         let clientTotalOutstanding = 0;
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getStartOfDaySL();
 
         client.instalments.forEach((inst) => {
           const instDueDate = new Date(inst.dueDate);

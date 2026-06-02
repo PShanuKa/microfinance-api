@@ -1,5 +1,6 @@
 // routes/clients/index.js
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
+import { getStartOfDaySL, getEndOfDaySL } from "../../utils/dateHelpers.js";
 
 export default async function clientRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -34,8 +35,8 @@ export default async function clientRoutes(fastify, opts) {
               ],
             } : {},
             status && status !== "All" ? { status } : {},
-            startDate ? { createdAt: { gte: new Date(startDate) } } : {},
-            endDate ? { createdAt: { lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)) } } : {},
+            startDate ? { createdAt: { gte: getStartOfDaySL(startDate) } } : {},
+            endDate ? { createdAt: { lte: getEndOfDaySL(endDate) } } : {},
           ],
         };
 

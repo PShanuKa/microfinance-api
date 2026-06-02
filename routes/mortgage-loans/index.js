@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { numberToWords } from "../../utils/numberToWords.js";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
-import { formatDateSL, formatDateTimeSL, formatDateGB } from "../../utils/dateHelpers.js";
+import { formatDateSL, formatDateTimeSL, formatDateGB, getStartOfDaySL, getEndOfDaySL } from "../../utils/dateHelpers.js";
 
 export default async function mortgageLoanRoutes(fastify, opts) {
   // Enforce JWT authentication on all routes in this plugin
@@ -270,8 +270,8 @@ export default async function mortgageLoanRoutes(fastify, opts) {
           } : {},
           startDate && endDate ? {
             createdAt: {
-              gte: new Date(startDate),
-              lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+              gte: getStartOfDaySL(startDate),
+              lte: getEndOfDaySL(endDate)
             }
           } : {},
           branchId && branchId !== "All" ? { mortgage: { branchId } } : {},
@@ -324,8 +324,8 @@ export default async function mortgageLoanRoutes(fastify, opts) {
         } : {},
         startDate && endDate ? {
           createdAt: {
-            gte: new Date(startDate),
-            lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+            gte: getStartOfDaySL(startDate),
+            lte: getEndOfDaySL(endDate)
           }
         } : {},
         branchId && branchId !== "All" ? { mortgage: { branchId } } : {},

@@ -1,6 +1,7 @@
 // routes/collections/index.js
 import { createBadRequestError, createNotFoundError } from "../../utils/errors.js";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
+import { getStartOfDaySL, getEndOfDaySL } from "../../utils/dateHelpers.js";
 
 export default async function collectionRoutes(fastify, opts) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -62,10 +63,8 @@ export default async function collectionRoutes(fastify, opts) {
       // 2. Wrap in Transaction
       const result = await fastify.prisma.$transaction(async (tx) => {
         // Find if there is already a SUBMITTED collection for the same loanId and date
-        const start = new Date(date);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(date);
-        end.setHours(23, 59, 59, 999);
+        const start = getStartOfDaySL(date);
+        const end = getEndOfDaySL(date);
 
         const existingSubmittedCollection = await tx.collection.findFirst({
           where: {
@@ -210,11 +209,9 @@ export default async function collectionRoutes(fastify, opts) {
 
     if (startDate || endDate) {
       where.date = {};
-      if (startDate) where.date.gte = new Date(startDate);
+      if (startDate) where.date.gte = getStartOfDaySL(startDate);
       if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.date.lte = end;
+        where.date.lte = getEndOfDaySL(endDate);
       }
     }
 
@@ -585,10 +582,8 @@ export default async function collectionRoutes(fastify, opts) {
       const { date, loanId } = request.query;
       const targetDate = date || new Date().toISOString().split("T")[0];
       
-      const start = new Date(targetDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(targetDate);
-      end.setHours(23, 59, 59, 999);
+      const start = getStartOfDaySL(targetDate);
+      const end = getEndOfDaySL(targetDate);
 
       // 1. Fetch instalments due today
       const instalments = await fastify.prisma.instalment.findMany({
