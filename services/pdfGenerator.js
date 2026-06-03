@@ -57,7 +57,8 @@ export async function generateLoanPdf(data, templateName = "loan-details.html") 
       displayHeaderFooter: true,
       headerTemplate: "<span></span>", // empty header so it doesn't repeat
       footerTemplate: footerHtml,
-      printBackground: true
+      printBackground: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     };
 
     let file = { content: compiledHtml };
