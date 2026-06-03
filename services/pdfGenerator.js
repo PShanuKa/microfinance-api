@@ -57,16 +57,25 @@ export async function generateLoanPdf(data, templateName = "loan-details.html") 
       displayHeaderFooter: true,
       headerTemplate: "<span></span>", // empty header so it doesn't repeat
       footerTemplate: footerHtml,
-      printBackground: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      printBackground: true
     };
 
-    let file = { content: compiledHtml };
+    // Use Puppeteer directly to avoid the hardcoded networkidle0 timeout in html-pdf-node
+    const puppeteer = (await import('puppeteer')).default;
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+    });
 
-    // Generate PDF buffer
-    const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+    const page = await browser.newPage();
+    // Using domcontentloaded instead of networkidle0 prevents hanging when fonts/styles take long
+    await page.setContent(compiledHtml, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const pdfBuffer = await page.pdf(options);
     
-    return pdfBuffer;
+    await browser.close();
+    
+    // puppeteer returns a Uint8Array, we convert it to Buffer to keep compatibility
+    return Buffer.from(pdfBuffer);
 
   } catch (error) {
     console.error("PDF Generation Error:", error);
