@@ -4,7 +4,16 @@ import { getStartOfDaySL, getEndOfDaySL } from "../../utils/dateHelpers.js";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
 import { excelExportService } from "../../services/excelExportService.js";
 
-const prisma = new PrismaClient();
+let dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+  const user = process.env.DB_USER || "root";
+  const pass = process.env.DB_PASS || "";
+  const host = process.env.DB_HOST || "localhost";
+  const port = process.env.DB_PORT || "3306";
+  const name = process.env.DB_NAME || "microfinance";
+  dbUrl = `mysql://${user}:${pass}@${host}:${port}/${name}`;
+}
+const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
 
 export default async function reportRoutes(fastify, options) {
   fastify.get(

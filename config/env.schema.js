@@ -1,7 +1,11 @@
 export const envSchema = {
   type: "object",
   required: [
-    "DATABASE_URL",
+    "DB_USER",
+    "DB_PASS",
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
     "JWT_SECRET",
     "JWT_REFRESH_SECRET",
   ],
@@ -22,6 +26,11 @@ export const envSchema = {
     DATABASE_URL: {
       type: "string",
     },
+    DB_USER: { type: "string" },
+    DB_PASS: { type: "string" },
+    DB_HOST: { type: "string" },
+    DB_PORT: { type: "string" },
+    DB_NAME: { type: "string" },
     DB_POOL_MIN: {
       type: "number",
       default: 2,
