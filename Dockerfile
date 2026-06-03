@@ -1,5 +1,20 @@
 FROM node:20-alpine
 
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    libgbm-dev \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libasound2 \
+    --no-install-recommends
+
 # Install OpenSSL which is required by Prisma
 RUN apk add --no-cache openssl tzdata
 
