@@ -12,6 +12,8 @@ import prismaPlugin from "./plugins/prisma.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import requestLoggerPlugin from "./plugins/requestLogger.js";
 import jwtPlugin from "./plugins/jwt.js";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 import {
   globalErrorHandler,
   notFoundHandler,
@@ -76,8 +78,24 @@ export async function buildApp(opts = {}) {
 
   await fastify.register(jwtPlugin);
   await fastify.register(requestLoggerPlugin);
+  
+  // Security Headers
+  await fastify.register(helmet, {
+    crossOriginResourcePolicy: false, // Allows cross-origin image requests
+  });
+
+  // Rate limiting
+  await fastify.register(rateLimit, {
+    max: process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX, 10) : 100,
+    timeWindow: process.env.RATE_LIMIT_TIME_WINDOW || '1 minute'
+  });
+
   await fastify.register(corsPlugin);
-  await fastify.register(swaggerPlugin);
+
+  if (process.env.NODE_ENV !== "production") {
+    await fastify.register(swaggerPlugin);
+  }
+  
   await fastify.register(prismaPlugin);
   await fastify.register(schedulerPlugin);
   await fastify.register(fastifyMultipart, {
