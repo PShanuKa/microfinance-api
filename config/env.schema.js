@@ -65,5 +65,21 @@ export const envSchema = {
       type: "string",
       default: "microfinance-uploads",
     },
+    MAIL_HOST: {
+      type: "string",
+      default: "",
+    },
+    MAIL_PORT: {
+      type: "number",
+      default: 587,
+    },
+    MAIL_USERNAME: {
+      type: "string",
+      default: "",
+    },
+    MAIL_PASSWORD: {
+      type: "string",
+      default: "",
+    },
   },
 };

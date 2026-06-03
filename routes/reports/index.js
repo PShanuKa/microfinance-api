@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { createBadRequestError } from "../../utils/errors.js";
 import { getStartOfDaySL, getEndOfDaySL } from "../../utils/dateHelpers.js";
 import { generateLoanPdf } from "../../services/pdfGenerator.js";
+import { excelExportService } from "../../services/excelExportService.js";
 
 const prisma = new PrismaClient();
 
@@ -367,4 +368,129 @@ export default async function reportRoutes(fastify, options) {
       return reply.send(pdfBuffer);
     }
   );
+
+  // ─── Collections Report (Approved Only) ────────────────────
+  fastify.get("/collections", {
+    preValidation: [fastify.authenticate],
+    schema: {
+      querystring: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", format: "date" },
+          endDate: { type: "string", format: "date" },
+          branchId: { type: "string" },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { startDate, endDate, branchId } = request.query;
+    const buffer = await excelExportService.generateCollectionsReport(prisma, startDate, endDate, branchId);
+    reply.header("Content-Disposition", `attachment; filename="Collections_Report.xlsx"`);
+    reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return reply.send(buffer);
+  });
+
+  // ─── Officer Wise Collections Report ───────────────────────
+  fastify.get("/collections-officer-wise", {
+    preValidation: [fastify.authenticate],
+    schema: {
+      querystring: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", format: "date" },
+          endDate: { type: "string", format: "date" },
+          branchId: { type: "string" },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { startDate, endDate, branchId } = request.query;
+    const buffer = await excelExportService.generateCollectionsOfficerWiseReport(prisma, startDate, endDate, branchId);
+    reply.header("Content-Disposition", `attachment; filename="Officer_Wise_Collections.xlsx"`);
+    reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return reply.send(buffer);
+  });
+
+  // ─── Completed Loans Report ────────────────────────────────
+  fastify.get("/completed-loans", {
+    preValidation: [fastify.authenticate],
+    schema: {
+      querystring: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", format: "date" },
+          endDate: { type: "string", format: "date" },
+          branchId: { type: "string" },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { startDate, endDate, branchId } = request.query;
+    const buffer = await excelExportService.generateCompletedLoansReport(prisma, startDate, endDate, branchId);
+    reply.header("Content-Disposition", `attachment; filename="Completed_Loans_Report.xlsx"`);
+    reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return reply.send(buffer);
+  });
+
+  // ─── Property Collections Report ──────────────────────────
+  fastify.get("/property-collections", {
+    preValidation: [fastify.authenticate],
+    schema: {
+      querystring: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", format: "date" },
+          endDate: { type: "string", format: "date" },
+          branchId: { type: "string" },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { startDate, endDate, branchId } = request.query;
+    const buffer = await excelExportService.generatePropertyCollectionsReport(prisma, startDate, endDate, branchId);
+    reply.header("Content-Disposition", `attachment; filename="Property_Collections_Report.xlsx"`);
+    reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return reply.send(buffer);
+  });
+
+  // ─── Overdue Summary Report ────────────────────────────────
+  fastify.get("/overdue-summary", {
+    preValidation: [fastify.authenticate],
+  }, async (request, reply) => {
+    const buffer = await excelExportService.generateOverdueSummaryReport(prisma);
+    reply.header("Content-Disposition", `attachment; filename="Overdue_Summary_Report.xlsx"`);
+    reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return reply.send(buffer);
+  });
+
+  // ─── Branch Performance Report ─────────────────────────────
+  fastify.get("/branch-performance", {
+    preValidation: [fastify.authenticate],
+  }, async (request, reply) => {
+    const buffer = await excelExportService.generateBranchPerformanceReport(prisma);
+    reply.header("Content-Disposition", `attachment; filename="Branch_Performance_Report.xlsx"`);
+    reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return reply.send(buffer);
+  });
+
+  // ─── Disbursement Report ──────────────────────────────────
+  fastify.get("/disbursement", {
+    preValidation: [fastify.authenticate],
+    schema: {
+      querystring: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", format: "date" },
+          endDate: { type: "string", format: "date" },
+          branchId: { type: "string" },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { startDate, endDate, branchId } = request.query;
+    const buffer = await excelExportService.generateDisbursementReport(prisma, startDate, endDate, branchId);
+    reply.header("Content-Disposition", `attachment; filename="Disbursement_Report.xlsx"`);
+    reply.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return reply.send(buffer);
+  });
 }

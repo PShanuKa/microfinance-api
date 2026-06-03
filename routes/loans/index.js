@@ -746,7 +746,7 @@ export default async function loanRoutes(fastify, opts) {
     await fastify.prisma.$transaction(async (tx) => {
       await tx.loan.update({
         where: { id },
-        data: { status: "COMPLETED" }
+        data: { status: "COMPLETED", completedAt: new Date() }
       });
       await tx.auditLog.create({
         data: {

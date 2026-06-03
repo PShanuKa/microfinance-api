@@ -156,6 +156,7 @@ model Loan {
   approvedById         String?
   approvedBy           User?      @relation("ApprovedLoans", fields: [approvedById], references: [id])
   approvedAt           DateTime?
+  completedAt          DateTime?
 
   branchId             String?
   branch               Branch?    @relation("BranchLoans", fields: [branchId], references: [id])
@@ -260,6 +261,7 @@ model Collection {
   attachments      CollectionAttachment[]
   status           CollectionStatus @default(SUBMITTED)
   rejectionReason  String?          @db.Text
+  approvedAt       DateTime?
   
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -308,6 +310,23 @@ model Settings {
   updatedAt            DateTime @updatedAt
 
   @@map("settings")
+}
+
+model ReportSettings {
+  id                String   @id @default("default")
+  
+  // Schedule: WEEKLY or MONTHLY
+  reportFrequency   String   @default("MONTHLY")
+  
+  // Email recipients (JSON array of email strings)
+  reportEmails      Json     @default("[]")
+  
+  // Enable/disable email sending
+  emailEnabled      Boolean  @default(false)
+  
+  updatedAt         DateTime @updatedAt
+
+  @@map("report_settings")
 }
 
 model NonCollectionWeek {

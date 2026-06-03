@@ -655,5 +655,414 @@ export const excelExportService = {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer;
-  }
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // REPORT FUNCTIONS
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Collections Report — Approved collections within a date range.
+   */
+  async generateCollectionsReport(prisma, startDate, endDate, branchId) {
+    const where = { status: "APPROVED" };
+    if (startDate && endDate) {
+      where.approvedAt = {
+        gte: new Date(`${startDate}T00:00:00.000Z`),
+        lte: new Date(`${endDate}T23:59:59.999Z`),
+      };
+    }
+    if (branchId && branchId !== "All") {
+      where.group = { branchId };
+    }
+
+    const collections = await prisma.collection.findMany({
+      where,
+      include: {
+        group: { include: { branch: { select: { name: true } } } },
+        loan: { select: { loanNo: true } },
+        collector: { select: { fullname: true } },
+      },
+      orderBy: { approvedAt: "desc" },
+    });
+
+    const workbook = new exceljs.Workbook();
+    const ws = workbook.addWorksheet("Collections Report");
+
+    ws.addRow(["Collections Report"]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow([`Period: ${startDate || "All"} to ${endDate || "All"}`]);
+    ws.getRow(2).font = { italic: true, size: 10, color: { argb: "FF666666" } };
+    ws.addRow([]);
+
+    const headers = ["#", "Group No", "Group Name", "Branch", "Loan No", "Collector", "Amount Collected", "Collection Date", "Approval Date", "Bank Ref"];
+    ws.addRow(headers);
+    const headerRow = ws.getRow(4);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+
+    let totalCollected = 0;
+    collections.forEach((col, idx) => {
+      const amount = Number(col.amountCollected);
+      totalCollected += amount;
+      ws.addRow([
+        idx + 1,
+        col.group?.groupNo || "-",
+        col.group?.name || "-",
+        col.group?.branch?.name || "Main",
+        col.loan?.loanNo || "-",
+        col.collector?.fullname || "-",
+        amount,
+        col.date ? formatExcelDate(new Date(col.date)) : "-",
+        col.approvedAt ? formatExcelDate(new Date(col.approvedAt)) : "-",
+        col.bankReference || "-",
+      ]);
+    });
+
+    ws.addRow([]);
+    const summaryRow = ws.addRow(["", "", "", "", "", "TOTAL", totalCollected]);
+    summaryRow.font = { bold: true };
+
+    const totalRows = collections.length + 4;
+    for (let r = 4; r <= totalRows; r++) {
+      for (let c = 1; c <= 10; c++) {
+        ws.getRow(r).getCell(c).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      }
+    }
+    [5, 12, 20, 15, 15, 20, 18, 15, 15, 15].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return await workbook.xlsx.writeBuffer();
+  },
+
+  /**
+   * Collection Officer Wise Report — Approved collections grouped by collector.
+   */
+  async generateCollectionsOfficerWiseReport(prisma, startDate, endDate, branchId) {
+    const where = { status: "APPROVED" };
+    if (startDate && endDate) {
+      where.approvedAt = {
+        gte: new Date(`${startDate}T00:00:00.000Z`),
+        lte: new Date(`${endDate}T23:59:59.999Z`),
+      };
+    }
+    if (branchId && branchId !== "All") {
+      where.group = { branchId };
+    }
+
+    const collections = await prisma.collection.findMany({
+      where,
+      include: {
+        group: { include: { branch: { select: { name: true } } } },
+        loan: { select: { loanNo: true } },
+        collector: { select: { id: true, fullname: true } },
+      },
+      orderBy: { approvedAt: "desc" },
+    });
+
+    const officerMap = {};
+    collections.forEach((col) => {
+      const oid = col.collector?.id || "unknown";
+      if (!officerMap[oid]) { officerMap[oid] = { name: col.collector?.fullname || "Unknown", collections: [], total: 0 }; }
+      officerMap[oid].total += Number(col.amountCollected);
+      officerMap[oid].collections.push(col);
+    });
+
+    const workbook = new exceljs.Workbook();
+    const ws = workbook.addWorksheet("Officer Wise Collections");
+    ws.addRow(["Collection Officer Wise Report"]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow([`Period: ${startDate || "All"} to ${endDate || "All"}`]);
+    ws.getRow(2).font = { italic: true, size: 10, color: { argb: "FF666666" } };
+    ws.addRow([]);
+
+    let currentRow = 4;
+    Object.values(officerMap).forEach((officer) => {
+      ws.addRow([`Officer: ${officer.name}`, "", "", `Total: Rs ${officer.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, `Collections: ${officer.collections.length}`]);
+      ws.getRow(currentRow).font = { bold: true, size: 11 };
+      ws.getRow(currentRow).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
+      currentRow++;
+
+      ws.addRow(["#", "Group", "Loan No", "Amount", "Collection Date", "Approval Date"]);
+      ws.getRow(currentRow).font = { bold: true };
+      ws.getRow(currentRow).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+      currentRow++;
+
+      officer.collections.forEach((col, idx) => {
+        ws.addRow([idx + 1, col.group?.name || "-", col.loan?.loanNo || "-", Number(col.amountCollected), col.date ? formatExcelDate(new Date(col.date)) : "-", col.approvedAt ? formatExcelDate(new Date(col.approvedAt)) : "-"]);
+        currentRow++;
+      });
+      ws.addRow([]); currentRow++;
+    });
+
+    for (let r = 4; r < currentRow; r++) {
+      for (let c = 1; c <= 6; c++) {
+        ws.getRow(r).getCell(c).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      }
+    }
+    [5, 25, 15, 18, 18, 18].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return await workbook.xlsx.writeBuffer();
+  },
+
+  /**
+   * Completed Loans Report — Loans completed within a date range.
+   */
+  async generateCompletedLoansReport(prisma, startDate, endDate, branchId) {
+    const where = { status: "COMPLETED" };
+    if (startDate && endDate) {
+      where.completedAt = {
+        gte: new Date(`${startDate}T00:00:00.000Z`),
+        lte: new Date(`${endDate}T23:59:59.999Z`),
+      };
+    }
+    if (branchId && branchId !== "All") { where.branchId = branchId; }
+
+    const loans = await prisma.loan.findMany({
+      where,
+      include: {
+        group: { include: { members: { include: { client: { select: { fullname: true } } } }, branch: { select: { name: true } } } },
+      },
+      orderBy: { completedAt: "desc" },
+    });
+
+    const workbook = new exceljs.Workbook();
+    const ws = workbook.addWorksheet("Completed Loans");
+    ws.addRow(["Completed Loans Report"]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow([`Period: ${startDate || "All"} to ${endDate || "All"}`]);
+    ws.getRow(2).font = { italic: true, size: 10, color: { argb: "FF666666" } };
+    ws.addRow([]);
+
+    ws.addRow(["#", "Loan No", "Group No", "Group Name", "Branch", "Leader", "Members", "Leader Amount", "Member Amount", "Created At", "Approved At", "Completed At"]);
+    ws.getRow(4).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    ws.getRow(4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+
+    loans.forEach((loan, idx) => {
+      const leader = loan.group?.members?.find((m) => m.isLeader)?.client;
+      ws.addRow([idx + 1, loan.loanNo, loan.group?.groupNo || "-", loan.group?.name || "-", loan.group?.branch?.name || "Main", leader?.fullname || "-", loan.group?.members?.length || 0, Number(loan.leaderLentAmount), Number(loan.memberLentAmount), formatExcelDate(new Date(loan.createdAt)), loan.approvedAt ? formatExcelDate(new Date(loan.approvedAt)) : "-", loan.completedAt ? formatExcelDate(new Date(loan.completedAt)) : "-"]);
+    });
+
+    const totalRows = loans.length + 4;
+    for (let r = 4; r <= totalRows; r++) {
+      for (let c = 1; c <= 12; c++) {
+        ws.getRow(r).getCell(c).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      }
+    }
+    [5, 15, 12, 20, 15, 20, 10, 18, 18, 15, 15, 15].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return await workbook.xlsx.writeBuffer();
+  },
+
+  /**
+   * Property (Mortgage) Collections Report — Property-wise.
+   */
+  async generatePropertyCollectionsReport(prisma, startDate, endDate, branchId) {
+    const where = {};
+    if (startDate && endDate) {
+      where.createdAt = {
+        gte: new Date(`${startDate}T00:00:00.000Z`),
+        lte: new Date(`${endDate}T23:59:59.999Z`),
+      };
+    }
+    if (branchId && branchId !== "All") { where.mortgage = { branchId }; }
+
+    const collections = await prisma.mortgageCollection.findMany({
+      where,
+      include: {
+        mortgage: { include: { client: { select: { fullname: true, clientNo: true } }, branch: { select: { name: true } } } },
+        collectedBy: { select: { fullname: true } },
+        items: { include: { instalment: { select: { monthNumber: true, dueAmount: true, penaltyAmount: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const propertyMap = {};
+    collections.forEach((col) => {
+      const mId = col.mortgageId;
+      if (!propertyMap[mId]) {
+        propertyMap[mId] = {
+          loanNo: col.mortgage?.loanNo || "-", assetType: col.mortgage?.assetType || "-",
+          clientName: col.mortgage?.client?.fullname || "-", branch: col.mortgage?.branch?.name || "Main",
+          lentAmount: Number(col.mortgage?.lentAmount || 0), collections: [], total: 0, principalTotal: 0,
+        };
+      }
+      propertyMap[mId].total += Number(col.amount);
+      propertyMap[mId].principalTotal += Number(col.principalReduction);
+      propertyMap[mId].collections.push(col);
+    });
+
+    const workbook = new exceljs.Workbook();
+    const ws = workbook.addWorksheet("Property Collections");
+    ws.addRow(["Property Collections Report"]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow([`Period: ${startDate || "All"} to ${endDate || "All"}`]);
+    ws.getRow(2).font = { italic: true, size: 10, color: { argb: "FF666666" } };
+    ws.addRow([]);
+
+    let currentRow = 4;
+    Object.values(propertyMap).forEach((prop) => {
+      ws.addRow([`${prop.loanNo} — ${prop.clientName} (${prop.assetType})`, "", "", `Lent: Rs ${prop.lentAmount.toLocaleString()}`, `Total Collected: Rs ${prop.total.toLocaleString()}`]);
+      ws.getRow(currentRow).font = { bold: true, size: 11 };
+      ws.getRow(currentRow).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
+      currentRow++;
+
+      ws.addRow(["#", "Date", "Amount", "Principal Reduction", "Collector", "Notes"]);
+      ws.getRow(currentRow).font = { bold: true };
+      ws.getRow(currentRow).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+      currentRow++;
+
+      prop.collections.forEach((col, idx) => {
+        ws.addRow([idx + 1, formatExcelDate(new Date(col.createdAt)), Number(col.amount), Number(col.principalReduction), col.collectedBy?.fullname || "-", col.notes || "-"]);
+        currentRow++;
+      });
+      ws.addRow([]); currentRow++;
+    });
+
+    for (let r = 4; r < currentRow; r++) {
+      for (let c = 1; c <= 6; c++) {
+        ws.getRow(r).getCell(c).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      }
+    }
+    [5, 15, 18, 20, 20, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return await workbook.xlsx.writeBuffer();
+  },
+
+  /**
+   * Overdue Summary Report
+   */
+  async generateOverdueSummaryReport(prisma) {
+    const today = new Date();
+    const instalments = await prisma.instalment.findMany({
+      where: { status: { in: ["UNPAID", "PARTIAL", "OVERDUE"] }, dueDate: { lt: today }, loan: { status: { in: ["ACTIVE", "APPROVED"] } } },
+      include: { client: { select: { fullname: true, clientNo: true, phone: true } }, loan: { include: { group: { include: { branch: { select: { name: true } } } } } } },
+      orderBy: { dueDate: "asc" },
+    });
+
+    const workbook = new exceljs.Workbook();
+    const ws = workbook.addWorksheet("Overdue Summary");
+    ws.addRow(["Overdue / Arrears Summary Report"]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow([`Generated: ${formatExcelDate(today)}`]);
+    ws.getRow(2).font = { italic: true, size: 10 };
+    ws.addRow([]);
+
+    ws.addRow(["#", "Client No", "Client Name", "Phone", "Loan No", "Group", "Branch", "Week", "Due Date", "Due Amount", "Paid", "Outstanding", "Days Overdue"]);
+    ws.getRow(4).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    ws.getRow(4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF991B1B" } };
+
+    let totalOutstanding = 0;
+    instalments.forEach((inst, idx) => {
+      const outstanding = Number(inst.dueAmount) - Number(inst.paidAmount);
+      const daysOverdue = Math.floor((today - new Date(inst.dueDate)) / (1000 * 60 * 60 * 24));
+      totalOutstanding += outstanding;
+      ws.addRow([idx + 1, inst.client?.clientNo || "-", inst.client?.fullname || "-", inst.client?.phone || "-", inst.loan?.loanNo || "-", inst.loan?.group?.name || "-", inst.loan?.group?.branch?.name || "Main", inst.weekNumber, formatExcelDate(new Date(inst.dueDate)), Number(inst.dueAmount), Number(inst.paidAmount), outstanding, daysOverdue]);
+    });
+
+    ws.addRow([]);
+    const sumRow = ws.addRow(["", "", "", "", "", "", "", "", "", "", "TOTAL", totalOutstanding]);
+    sumRow.font = { bold: true };
+
+    const totalRows = instalments.length + 4;
+    for (let r = 4; r <= totalRows; r++) {
+      for (let c = 1; c <= 13; c++) {
+        ws.getRow(r).getCell(c).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      }
+    }
+    [5, 12, 22, 15, 15, 20, 15, 8, 15, 14, 14, 14, 14].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return await workbook.xlsx.writeBuffer();
+  },
+
+  /**
+   * Branch Performance Report
+   */
+  async generateBranchPerformanceReport(prisma) {
+    const branches = await prisma.branch.findMany({
+      include: { loans: { include: { instalments: true } } },
+    });
+
+    const workbook = new exceljs.Workbook();
+    const ws = workbook.addWorksheet("Branch Performance");
+    ws.addRow(["Branch Performance Report"]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow([`Generated: ${formatExcelDate(new Date())}`]);
+    ws.getRow(2).font = { italic: true, size: 10 };
+    ws.addRow([]);
+
+    ws.addRow(["#", "Branch", "Total Loans", "Active", "Completed", "Total Disbursed", "Total Collected", "Outstanding", "Collection Rate %"]);
+    ws.getRow(4).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    ws.getRow(4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+
+    branches.forEach((branch, idx) => {
+      const active = branch.loans.filter((l) => ["ACTIVE", "APPROVED"].includes(l.status)).length;
+      const completed = branch.loans.filter((l) => l.status === "COMPLETED").length;
+      let disbursed = 0, collected = 0, outstanding = 0;
+      branch.loans.forEach((loan) => {
+        loan.instalments.forEach((inst) => { disbursed += Number(inst.dueAmount); collected += Number(inst.paidAmount); outstanding += Number(inst.remainingDue); });
+      });
+      const rate = disbursed > 0 ? ((collected / disbursed) * 100).toFixed(1) : "0.0";
+      ws.addRow([idx + 1, branch.name, branch.loans.length, active, completed, disbursed, collected, outstanding, `${rate}%`]);
+    });
+
+    const totalRows = branches.length + 4;
+    for (let r = 4; r <= totalRows; r++) {
+      for (let c = 1; c <= 9; c++) {
+        ws.getRow(r).getCell(c).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      }
+    }
+    [5, 20, 12, 12, 16, 18, 18, 18, 16].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return await workbook.xlsx.writeBuffer();
+  },
+
+  /**
+   * Disbursement Report — Loans approved within a date range.
+   */
+  async generateDisbursementReport(prisma, startDate, endDate, branchId) {
+    const where = { approvedAt: { not: null } };
+    if (startDate && endDate) {
+      where.approvedAt = { gte: new Date(`${startDate}T00:00:00.000Z`), lte: new Date(`${endDate}T23:59:59.999Z`) };
+    }
+    if (branchId && branchId !== "All") { where.branchId = branchId; }
+
+    const loans = await prisma.loan.findMany({
+      where,
+      include: { group: { include: { members: { include: { client: { select: { fullname: true } } } }, branch: { select: { name: true } } } }, approvedBy: { select: { fullname: true } } },
+      orderBy: { approvedAt: "desc" },
+    });
+
+    const workbook = new exceljs.Workbook();
+    const ws = workbook.addWorksheet("Disbursement Report");
+    ws.addRow(["Loan Disbursement Report"]);
+    ws.getRow(1).font = { bold: true, size: 14 };
+    ws.addRow([`Period: ${startDate || "All"} to ${endDate || "All"}`]);
+    ws.getRow(2).font = { italic: true, size: 10, color: { argb: "FF666666" } };
+    ws.addRow([]);
+
+    ws.addRow(["#", "Loan No", "Group No", "Group Name", "Branch", "Leader", "Members", "Leader Amount", "Member Amount", "Processing Fee", "Approved By", "Approved At"]);
+    ws.getRow(4).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    ws.getRow(4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+
+    let totalLeader = 0, totalMember = 0;
+    loans.forEach((loan, idx) => {
+      const leader = loan.group?.members?.find((m) => m.isLeader)?.client;
+      totalLeader += Number(loan.leaderLentAmount); totalMember += Number(loan.memberLentAmount);
+      ws.addRow([idx + 1, loan.loanNo, loan.group?.groupNo || "-", loan.group?.name || "-", loan.group?.branch?.name || "Main", leader?.fullname || "-", loan.group?.members?.length || 0, Number(loan.leaderLentAmount), Number(loan.memberLentAmount), Number(loan.processingFee), loan.approvedBy?.fullname || "-", loan.approvedAt ? formatExcelDate(new Date(loan.approvedAt)) : "-"]);
+    });
+
+    ws.addRow([]);
+    const sumRow = ws.addRow(["", "", "", "", "", "", "TOTALS", totalLeader, totalMember]);
+    sumRow.font = { bold: true };
+
+    const totalRows = loans.length + 4;
+    for (let r = 4; r <= totalRows; r++) {
+      for (let c = 1; c <= 12; c++) {
+        ws.getRow(r).getCell(c).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      }
+    }
+    [5, 15, 12, 20, 15, 20, 10, 16, 16, 14, 18, 15].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    return await workbook.xlsx.writeBuffer();
+  },
 };

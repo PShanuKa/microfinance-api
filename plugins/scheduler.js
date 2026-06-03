@@ -2,6 +2,7 @@
 import cron from "node-cron";
 import { processMortgageInstalments } from "../utils/mortgageCron.js";
 import { processDailyPenalties }      from "../utils/penaltyCron.js";
+import { processScheduledReports }    from "../utils/reportCron.js";
 
 export default async function schedulerPlugin(fastify, opts) {
 
@@ -32,6 +33,40 @@ export default async function schedulerPlugin(fastify, opts) {
   }, { timezone: "Asia/Colombo" });
 
   fastify.log.info("✔ Scheduler registered: instalments + penalties (daily at midnight).");
+
+  // ─── Weekly reports: Every Monday at 6:00 AM (Asia/Colombo) ─────────────────
+  cron.schedule("0 6 * * 1", async () => {
+    fastify.log.info("⏰ [CRON] Running weekly report generator...");
+    try {
+      const settings = await fastify.prisma.reportSettings.findUnique({ where: { id: "default" } });
+      if (settings?.reportFrequency === "WEEKLY" && settings?.emailEnabled) {
+        const result = await processScheduledReports(fastify.prisma, fastify.log);
+        fastify.log.info(`⏰ [CRON] Weekly reports done — sent: ${result.sent}`);
+      } else {
+        fastify.log.info("⏰ [CRON] Weekly reports skipped — frequency not WEEKLY or disabled.");
+      }
+    } catch (err) {
+      fastify.log.error(err, "[CRON] Weekly report job failed");
+    }
+  }, { timezone: "Asia/Colombo" });
+
+  // ─── Monthly reports: 1st of every month at 6:00 AM (Asia/Colombo) ──────────
+  cron.schedule("0 6 1 * *", async () => {
+    fastify.log.info("⏰ [CRON] Running monthly report generator...");
+    try {
+      const settings = await fastify.prisma.reportSettings.findUnique({ where: { id: "default" } });
+      if (settings?.reportFrequency === "MONTHLY" && settings?.emailEnabled) {
+        const result = await processScheduledReports(fastify.prisma, fastify.log);
+        fastify.log.info(`⏰ [CRON] Monthly reports done — sent: ${result.sent}`);
+      } else {
+        fastify.log.info("⏰ [CRON] Monthly reports skipped — frequency not MONTHLY or disabled.");
+      }
+    } catch (err) {
+      fastify.log.error(err, "[CRON] Monthly report job failed");
+    }
+  }, { timezone: "Asia/Colombo" });
+
+  fastify.log.info("✔ Scheduler registered: report emails (weekly Mon 6AM + monthly 1st 6AM).");
 
   // ─── Manual trigger: instalment generation ──────────────────────────────────
   /*

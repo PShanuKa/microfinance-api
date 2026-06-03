@@ -499,7 +499,7 @@ export default async function collectionRoutes(fastify, opts) {
       // Update Collection status
       await tx.collection.update({
         where: { id },
-        data: { status: "APPROVED" }
+        data: { status: "APPROVED", approvedAt: new Date() }
       });
 
       // Audit Log
