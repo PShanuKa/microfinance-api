@@ -68,6 +68,26 @@ export default async function schedulerPlugin(fastify, opts) {
 
   fastify.log.info("✔ Scheduler registered: report emails (weekly Mon 6AM + monthly 1st 6AM).");
 
+  // ─── Manual trigger: report generator ─────────────────────────────────────────
+  fastify.post("/api/scheduler/run-reports", {
+    // preHandler: fastify.authenticate,
+    handler: async (request, reply) => {
+      fastify.log.info("⏰ [MANUAL] Report generator triggered.");
+      try {
+        // Run report generation regardless of emailEnabled status, but we need settings
+        const result = await processScheduledReports(fastify.prisma, fastify.log);
+        return {
+          success: true,
+          message: `Report generation complete. Sent: ${result.sent}`,
+          result,
+        };
+      } catch (err) {
+        fastify.log.error(err, "[MANUAL] Report generator job failed");
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    },
+  });
+
   // ─── Manual trigger: instalment generation ──────────────────────────────────
   /*
   fastify.post("/api/scheduler/run-mortgage-instalments", {
